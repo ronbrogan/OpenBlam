@@ -22,9 +22,6 @@ stages:
       vmImage: 'vs2017-win2016'
 
     steps:
-    - task: ManualIntervention@8
-      inputs:
-        instructions: 'Publish NuGet packages?'
     - task: DotNetCoreCLI@2
       displayName: Pack OpenBlam Solution
       inputs:
@@ -48,6 +45,9 @@ stages:
       vmImage: 'vs2017-win2016'
     
     steps:
+      - task: ManualIntervention@8
+        inputs:
+          instructions: 'Publish NuGet packages?'
       - task: DotNetCoreCLI@2
         inputs:
           command: 'push'
