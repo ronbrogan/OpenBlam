@@ -32,25 +32,3 @@ stages:
 
     - publish: $(Build.ArtifactStagingDirectory)/*
       artifact: drop
-
-- stage: Release
-  displayName: Release stage
-  dependsOn: Build
-  condition: succeeded()
-
-  jobs:
-  - job: Push
-    displayName: 'Push NuGet Packages'
-    pool:
-      vmImage: 'vs2017-win2016'
-    
-    steps:
-      - task: ManualIntervention@8
-        inputs:
-          instructions: 'Publish NuGet packages?'
-      - task: DotNetCoreCLI@2
-        inputs:
-          command: 'push'
-          packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-          nuGetFeedType: 'external'
-          publishFeedCredentials: 'OpenBlam NuGet via ronbrogan'
