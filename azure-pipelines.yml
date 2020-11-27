@@ -30,5 +30,5 @@ stages:
           $(workingDirectory)/OpenBlam.sln
         arguments: --configuration Release --output $(Build.ArtifactStagingDirectory)
 
-    - publish: $(Build.ArtifactStagingDirectory)/*
+    - publish: $(Build.ArtifactStagingDirectory)
       artifact: drop
