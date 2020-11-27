@@ -1,0 +1,56 @@
+# Starter pipeline
+
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+variables:
+  # Working Directory
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+stages:
+- stage: Build
+  displayName: Build stage
+
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: 'vs2017-win2016'
+
+    steps:
+    - task: ManualIntervention@8
+      inputs:
+        instructions: 'Publish NuGet packages?'
+    - task: DotNetCoreCLI@2
+      displayName: Pack OpenBlam Solution
+      inputs:
+        command: 'pack'
+        projects: |
+          $(workingDirectory)/OpenBlam.sln
+        arguments: --configuration Release --output $(Build.ArtifactStagingDirectory)
+
+    - publish: $(Build.ArtifactStagingDirectory)/*
+      artifact: drop
+
+- stage: Release
+  displayName: Release stage
+  dependsOn: Build
+  condition: succeeded()
+
+  jobs:
+  - job: Push
+    displayName: 'Push NuGet Packages'
+    pool:
+      vmImage: 'vs2017-win2016'
+    
+    steps:
+      - task: DotNetCoreCLI@2
+        inputs:
+          command: 'push'
+          packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+          nuGetFeedType: 'external'
+          publishFeedCredentials: 'OpenBlam NuGet via ronbrogan'
