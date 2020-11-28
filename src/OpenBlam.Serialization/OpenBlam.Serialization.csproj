@@ -3,6 +3,9 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <PackageId>OpenBlam.Serialization</PackageId>
     <VersionPrefix>1.0.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
@@ -13,15 +16,14 @@
       This package does not currently provide any writing semantics, however it does expose some introspection utilities that can be leveraged to write data.
     </Description>
   </PropertyGroup>
-
+  
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.8.0" />
   </ItemGroup>
 
-  <!-- TODO: Put this in a .targets file or something -->
   <ItemGroup>
-    <CompilerVisibleProperty Include="DebugSerializerGeneration" />
-    <CompilerVisibleProperty Include="GenerateSerializersInto" />
+    <!-- Package the generator in the analyzer directory of the nuget package -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="build\OpenBlam.Serialization.targets" Pack="true" PackagePath="build\OpenBlam.Serialization.targets" />
   </ItemGroup>
-
 </Project>
