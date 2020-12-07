@@ -22,6 +22,12 @@ stages:
       vmImage: 'vs2017-win2016'
 
     steps:
+    # dotnet test --no-build --filter skip!=true
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: test
+        projects: '$(workingDirectory)/OpenBlam.sln'
+        arguments: ' --filter TestCategory!=RequiresMaps'
     - task: DotNetCoreCLI@2
       displayName: Pack OpenBlam Solution
       inputs:

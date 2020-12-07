@@ -1,10 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using OpenBlam.Serialization.Layout;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 namespace OpenBlam.Serialization
 {
@@ -12,8 +10,10 @@ namespace OpenBlam.Serialization
     {
         private static Type[] memberAttributes = new[]
         {
+            typeof(InPlaceObjectAttribute),
             typeof(PrimitiveValueAttribute),
             typeof(PrimitiveArrayAttribute),
+            typeof(ReferenceValueAttribute),
             typeof(ReferenceArrayAttribute),
             typeof(StringValueAttribute),
             typeof(Utf16StringValueAttribute),
@@ -40,7 +40,15 @@ namespace OpenBlam.Serialization
         {
             var members = new List<MemberInfo>();
 
-            var allMembers = type.GetMembers();
+            var allMembers = type.GetMembers().ToList();
+
+            var baseType = type.BaseType;
+
+            while (baseType != null)
+            {
+                allMembers.AddRange(baseType.GetMembers());
+                baseType = baseType.BaseType;
+            }
 
             foreach (var member in allMembers)
             {
@@ -74,15 +82,17 @@ namespace OpenBlam.Serialization
 
         private static Dictionary<Type, Func<AttributeData, SerializableMemberAttribute>> attributeFactories = new Dictionary<Type, Func<AttributeData, SerializableMemberAttribute>>
         {
-            {typeof(PrimitiveValueAttribute), a => new PrimitiveValueAttribute((int)a.ConstructorArguments[0].Value) },
-            {typeof(PrimitiveArrayAttribute), a => new PrimitiveArrayAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value) },
-            {typeof(ReferenceArrayAttribute), a => new ReferenceArrayAttribute((int)a.ConstructorArguments[0].Value) },
-            {typeof(StringValueAttribute), a => new StringValueAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value) },
-            {typeof(Utf16StringValueAttribute), a => new Utf16StringValueAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value) },
-            {typeof(InternedStringAttribute), a => new InternedStringAttribute((int)a.ConstructorArguments[0].Value) },
+            [typeof(InPlaceObjectAttribute)] = a => new InPlaceObjectAttribute((int)a.ConstructorArguments[0].Value),
+            [typeof(PrimitiveValueAttribute)] = a => new PrimitiveValueAttribute((int)a.ConstructorArguments[0].Value),
+            [typeof(PrimitiveArrayAttribute)] = a => new PrimitiveArrayAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value),
+            [typeof(ReferenceArrayAttribute)] = a => new ReferenceArrayAttribute((int)a.ConstructorArguments[0].Value),
+            [typeof(StringValueAttribute)] = a => new StringValueAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value),
+            [typeof(ReferenceValueAttribute)] = a => new ReferenceValueAttribute((int)a.ConstructorArguments[0].Value),
+            [typeof(Utf16StringValueAttribute)] = a => new Utf16StringValueAttribute((int)a.ConstructorArguments[0].Value, (int)a.ConstructorArguments[1].Value),
+            [typeof(InternedStringAttribute)] = a => new InternedStringAttribute((int)a.ConstructorArguments[0].Value),
         };
 
-    private LayoutInfo(int? size, MemberInfo[] infos)
+        private LayoutInfo(int? size, MemberInfo[] infos)
         {
             this.Size = size;
             this.MemberInfos = infos;

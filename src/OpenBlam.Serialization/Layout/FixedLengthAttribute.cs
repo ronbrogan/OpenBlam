@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace OpenBlam.Serialization.Layout
+﻿namespace OpenBlam.Serialization.Layout
 {
     /// <summary>
     /// Designates a type as serializable, with a specified size

@@ -54,6 +54,11 @@ namespace OpenBlam.Serialization.Tests
             tagRef = BlamSerializer.Deserialize<ClassTestTag>(new MemoryStream(testTagData), 0, 100, null);
             AssertData(tagRef);
 
+            var offsetData = new byte[24 + testTagData.Length];
+            testTagData.CopyTo(offsetData, 20);
+
+            tagRef = BlamSerializer.Deserialize<ClassTestTag>(new MemoryStream(offsetData), 20, 80, null);
+            AssertData(tagRef);
 
             var tagStructInstance = new StructTestTag();
             tagStructInstance = (StructTestTag)BlamSerializer.DeserializeInto(tagStructInstance, typeof(StructTestTag), new MemoryStream(testTagData), 0, 100, null);
@@ -70,6 +75,32 @@ namespace OpenBlam.Serialization.Tests
             tagRefInstance = new ClassTestTag();
             tagRefInstance = BlamSerializer.DeserializeInto<ClassTestTag>(tagRefInstance, new MemoryStream(testTagData), 0, 100, null);
             AssertData(tagRefInstance);
+        }
+
+        [TestMethod]
+        public void Deserialize_WrapperUsingInPlaceObjec()
+        {
+            var tagRef = BlamSerializer.Deserialize<EmptyWrapper>(new MemoryStream(testTagData), 0, 100, null);
+            AssertData(tagRef);
+
+            var offsetData = new byte[24 + testTagData.Length];
+            testTagData.CopyTo(offsetData, 20);
+
+            tagRef = BlamSerializer.Deserialize<EmptyWrapper>(new MemoryStream(offsetData), 20, 80, null);
+            AssertData(tagRef);
+        }
+
+        [TestMethod]
+        public void Deserialize_ReferenceValue()
+        {
+            var tagRef = BlamSerializer.Deserialize<ReferenceValueHolderTag>(new MemoryStream(testTagData), 0, 100, null);
+            AssertData(tagRef.SubValue);
+
+            var offsetData = new byte[24 + testTagData.Length];
+            testTagData.CopyTo(offsetData, 20);
+
+            tagRef = BlamSerializer.Deserialize<ReferenceValueHolderTag>(new MemoryStream(offsetData), 20, 80, null);
+            AssertData(tagRef.SubValue);
         }
 
         private void AssertData(StructTestTag tag)
@@ -99,9 +130,23 @@ namespace OpenBlam.Serialization.Tests
 
             Assert.AreEqual(0.001f, tag.SubValues[1].SubSubTags[1].Value, 3);
 
+            AssertData(tag.SubValues[0]);
+
             Assert.AreEqual(0xefbeadde, tag.SubValues[0].ArrayItem[0]);
 
             Assert.AreEqual("mt1", tag.SubValues[0].SubSubTags[0].StringVal);
+        }
+
+        private void AssertData(SubTag subtag)
+        {
+            Assert.AreEqual(0xefbeadde, subtag.ArrayItem[0]);
+
+            Assert.AreEqual("mt1", subtag.SubSubTags[0].StringVal);
+        }
+
+        public void AssertData(EmptyWrapper wrapper)
+        {
+            AssertData(wrapper.Tag);
         }
 
         private byte[] testTagData = new byte[] {

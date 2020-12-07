@@ -46,25 +46,39 @@ namespace OpenBlam.Serialization.Tests
 
         [ReferenceArray(8)]
         public SubTag[] SubValues { get; set; }
+    }
 
-        [FixedLength(12)]
-        public class SubTag
+    [FixedLength(12)]
+    public class SubTag
+    {
+        [PrimitiveArray(0, 1)]
+        public uint[] ArrayItem { get; set; }
+
+        [ReferenceArray(4)]
+        public SubSubTag[] SubSubTags { get; set; }
+
+        [FixedLength(8)]
+        public class SubSubTag
         {
-            [PrimitiveArray(0, 1)]
-            public uint[] ArrayItem { get; set; }
+            [PrimitiveValue(0)]
+            public float Value { get; set; }
 
-            [ReferenceArray(4)]
-            public SubSubTag[] SubSubTags { get; set; }
-
-            [FixedLength(8)]
-            public class SubSubTag
-            {
-                [PrimitiveValue(0)]
-                public float Value { get; set; }
-
-                [StringValue(4, 4)]
-                public string StringVal { get; set; }
-            }
+            [StringValue(4, 4)]
+            public string StringVal { get; set; }
         }
+    }
+
+    [ArbitraryLength]
+    public class EmptyWrapper
+    {
+        [InPlaceObject(0)]
+        public ClassTestTag Tag { get; set; }
+    }
+
+    [ArbitraryLength]
+    public class ReferenceValueHolderTag
+    {
+        [ReferenceValue(12)]
+        public SubTag SubValue { get; set; }
     }
 }

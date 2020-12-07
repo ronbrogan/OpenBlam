@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace OpenBlam.Serialization.Layout
+﻿namespace OpenBlam.Serialization.Layout
 {
     /// <summary>
     /// Designates a type as serializable, but of unknown length. 

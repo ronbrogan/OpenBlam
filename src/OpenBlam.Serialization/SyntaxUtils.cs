@@ -34,7 +34,7 @@ namespace OpenBlam.Serialization
                 VariableDeclarator(identifier).WithInitializer(EqualsValueClause(initializer))));
         }
 
-        public static ExpressionSyntax ReadSpanInt32(SyntaxToken spanIdentifier, SyntaxToken startIdentifier, int offset)
+        public static ExpressionSyntax DataReadInt32(SyntaxToken spanIdentifier, SyntaxToken startIdentifier, int offset)
         {
             return ReadSpanInt32(spanIdentifier, BinaryExpression(SyntaxKind.AddExpression,
                             IdentifierName(startIdentifier),

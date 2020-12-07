@@ -199,6 +199,15 @@ namespace OpenBlam.Serialization
             return Deserialize<T>(this.data.Span, instanceStart, staticOffset, stringProvider);
         }
 
+        /// <summary>
+        /// Deserialize the specified type into a new instance
+        /// </summary>
+        /// <param name="type">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static object Deserialize(Type type, Span<byte> allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(type, out var desers) && desers.deserializeReference != null)
@@ -209,6 +218,15 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{type.Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into a new instance
+        /// </summary>
+        /// <typeparam name="T">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static T Deserialize<T>(Span<byte> allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(typeof(T), out var deser))
@@ -219,6 +237,17 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{typeof(T).Name}' was not found in the deserializer collection");
         }
 
+
+        /// <summary>
+        /// Deserialize the specified type into the provided instance
+        /// </summary>
+        /// <param name="instance">The instance to populate</param>
+        /// <param name="type">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static object DeserializeInto(object instance, Type type, Span<byte> allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(type, out var desers) && desers.deserializeIntoReference != null)
@@ -229,6 +258,16 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{type.Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into the provided instance
+        /// </summary>
+        /// <typeparam name="T">Type to deserialize</param>
+        /// <param name="instance">The instance to populate</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static T DeserializeInto<T>(T instance, Span<byte> allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(typeof(T), out var deser))
@@ -239,6 +278,15 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{typeof(T).Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into a new instance
+        /// </summary>
+        /// <param name="type">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static object Deserialize(Type type, Stream allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(type, out var desers) && desers.deserializeReference != null)
@@ -249,6 +297,15 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{type.Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into a new instance
+        /// </summary>
+        /// <typeparam name="T">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static T Deserialize<T>(Stream allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(typeof(T), out var deser))
@@ -259,6 +316,16 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{typeof(T).Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into the provided instance
+        /// </summary>
+        /// <param name="instance">The instance to populate</param>
+        /// <param name="type">Type to deserialize</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static object DeserializeInto(object instance, Type type, Stream allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(type, out var desers) && desers.deserializeIntoReference != null)
@@ -269,6 +336,16 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{type.Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Deserialize the specified type into the provided instance
+        /// </summary>
+        /// <typeparam name="T">Type to deserialize</param>
+        /// <param name="instance">The instance to populate</param>
+        /// <param name="allData">Data to read</param>
+        /// <param name="instanceStart">The current instance's offset from the beginning of the data</param>
+        /// <param name="staticOffset">A static offset that is applied when following pointers</param>
+        /// <param name="stringProvider">An interned string provider to retrieve string values from</param>
+        /// <returns>The hydrated instance</returns>
         public static T DeserializeInto<T>(T instance, Stream allData, int instanceStart = 0, int staticOffset = 0, IInternedStringProvider stringProvider = null)
         {
             if (deserializers.TryGetValue(typeof(T), out var deser))
@@ -279,11 +356,17 @@ namespace OpenBlam.Serialization
             throw new NotSupportedException($"Type '{typeof(T).Name}' was not found in the deserializer collection");
         }
 
+        /// <summary>
+        /// Returns the size of the type when serialized
+        /// </summary>
         public static int SizeOf<T>()
         {
             return SizeOf(typeof(T));
         }
 
+        /// <summary>
+        /// Returns the size of the type when serialized
+        /// </summary>
         public static int SizeOf(Type t)
         {
             var fixedLengthAttr = t.GetCustomAttribute<FixedLengthAttribute>();
@@ -298,6 +381,12 @@ namespace OpenBlam.Serialization
             return Marshal.SizeOf(t);
         }
 
+        /// <summary>
+        /// Determines the offset of the property in the specified type
+        /// </summary>
+        /// <param name="t">The type to inspect</param>
+        /// <param name="propertyName">The property on the type</param>
+        /// <returns>The offset specified on the property</returns>
         public static int StartsAt(Type t, string propertyName)
         {
             SerializableMemberAttribute memberAttr = null;
@@ -317,6 +406,11 @@ namespace OpenBlam.Serialization
             return memberAttr.Offset;
         }
 
+        /// <summary>
+        /// Determines the offset of the specified property
+        /// </summary>
+        /// <param name="property">An expression to select the property</param>
+        /// <returns>The offset specified on the property</returns>
         public static int StartsAt<T>(Expression<Func<T, object>> property)
         {
             SerializableMemberAttribute memberAttr = null;

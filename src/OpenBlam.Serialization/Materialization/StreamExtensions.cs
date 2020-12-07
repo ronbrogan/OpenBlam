@@ -15,7 +15,6 @@ namespace OpenBlam.Serialization.Materialization
             var len = Math.Min(length, data.Length - offset);
 
             Span<byte> stringBytes = stackalloc byte[0];
-            Span<char> stringChars = stackalloc char[0];
 
             if(length < 512)
             {
@@ -31,15 +30,6 @@ namespace OpenBlam.Serialization.Materialization
 
             var actualRead = data.Read(stringBytes);
 
-            if(actualRead < 512)
-            {
-                stringChars = stackalloc char[actualRead];
-            }
-            else
-            {
-                stringChars = new char[actualRead];
-            }
-
             var i = 0;
             for(; i < actualRead; i++)
             {
@@ -47,12 +37,10 @@ namespace OpenBlam.Serialization.Materialization
                 {
                     break;
                 }
-
-                stringChars[i] = (char)stringBytes[i];
             }
 
             // TODO: remove .ToArray() once we're on netstandard2.1+
-            return new string(stringChars.Slice(0, i).ToArray());
+            return Encoding.UTF8.GetString(stringBytes.Slice(0, i).ToArray());
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -61,7 +49,6 @@ namespace OpenBlam.Serialization.Materialization
             var byteLength = length * 2;
 
             Span<byte> stringBytes = stackalloc byte[0];
-            Span<char> stringChars = stackalloc char[0];
 
             if (byteLength < 512)
             {
@@ -75,75 +62,19 @@ namespace OpenBlam.Serialization.Materialization
             if (data.Position != offset)
                 data.Position = offset;
 
-            var possibleCharCount = data.Read(stringBytes) / 2;
-
-            if (possibleCharCount < 512)
-            {
-                stringChars = stackalloc char[possibleCharCount];
-            }
-            else
-            {
-                stringChars = new char[possibleCharCount];
-            }
+            var possibleCharCount = data.Read(stringBytes);
 
             var i = 0;
-            for (; i < possibleCharCount; i++)
+            for (; i < possibleCharCount; i += 2)
             {
-                var c = PBitConverter.ToChar(stringBytes.Slice(i*2));
-                if (c == 0b0)
+                if (stringBytes[i] == 0b0 && stringBytes[i + 1] == 0b0)
                 {
                     break;
                 }
-
-                stringChars[i] = c;
             }
 
             // TODO: remove .ToArray() once we're on netstandard2.1+
-            return new string(stringChars.Slice(0, i).ToArray());
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static string ReadStringStarting(this Stream data, int offset)
-        {
-            var builder = new StringBuilder(32);
-
-            Span<byte> stringBytes = stackalloc byte[512];
-            Span<char> stringChars = stackalloc char[512];
-
-            if (data.Position != offset)
-                data.Position = offset;
-
-            while (true)
-            {
-                var actualRead = data.Read(stringBytes);
-
-                int foundNull = -1;
-
-                for(var i = 0; i < actualRead; i++)
-                {
-                    if (stringBytes[i] == 0b0)
-                    {
-                        foundNull = i;
-                        break;
-                    }
-                    else
-                    {
-                        stringChars[i] = (char)stringBytes[i];
-                    }
-                }
-
-                if(foundNull >= 0)
-                {
-                    builder.Append(stringChars.Slice(0, foundNull));
-                    break;
-                }
-                else
-                {
-                    builder.Append(stringChars.Slice(0, actualRead));
-                }
-            }
-
-            return builder.ToString();
+            return new string(MemoryMarshal.Cast<byte, char>(stringBytes.Slice(0, i)).ToArray());
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -158,74 +89,67 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static short ReadInt16At(this Stream data, int offset)
         {
-            if(offset + 2 > data.Length)
-            {
-                return 0;
-            }
-
             Span<byte> bytes = stackalloc byte[2];
 
             if (data.Position != offset)
                 data.Position = offset;
 
-            data.Read(bytes);
+            if (data.Read(bytes) != 2)
+            {
+                return 0;
+            }
 
-            return PBitConverter.ToInt16(bytes);
-            
+            return MemoryMarshal.Read<short>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ReadInt32At(this Stream data, int offset)
         {
-            if (offset + 4 > data.Length)
-            {
-                return 0;
-            }
-
             Span<byte> bytes = stackalloc byte[4];
 
             if (data.Position != offset)
                 data.Position = offset;
 
-            data.Read(bytes);
+            if (data.Read(bytes) != 4)
+            {
+                return 0;
+            }
 
-            return PBitConverter.ToInt32(bytes);
+            return MemoryMarshal.Read<int>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ushort ReadUInt16At(this Stream data, int offset)
         {
-            if (offset + 2 > data.Length)
-            {
-                return 0;
-            }
-
             Span<byte> bytes = stackalloc byte[2];
 
             if (data.Position != offset)
                 data.Position = offset;
 
-            data.Read(bytes);
-
-            return PBitConverter.ToUInt16(bytes);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static uint ReadUInt32At(this Stream data, int offset)
-        {
-            if (offset + 4 > data.Length)
+            if (data.Read(bytes) != 2)
             {
                 return 0;
             }
 
+            return MemoryMarshal.Read<ushort>(bytes);
+        }
+
+        private static byte[] buffer = new byte[16];
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint ReadUInt32At(this Stream data, int offset)
+        {
             Span<byte> bytes = stackalloc byte[4];
 
             if (data.Position != offset)
                 data.Position = offset;
 
-            data.Read(bytes);
+            if (data.Read(bytes) != 4)
+            {
+                return 0;
+            }
 
-            return PBitConverter.ToUInt32(bytes);
+            return MemoryMarshal.Read<uint>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -236,12 +160,12 @@ namespace OpenBlam.Serialization.Materialization
             if (data.Position != offset)
                 data.Position = offset;
 
-            data.Read(bytes);
+            if (data.Read(bytes) != 8)
+            {
+                return Vector2.Zero;
+            }
 
-            return new Vector2(
-                PBitConverter.ToSingle(bytes.Slice(0, 4)),
-                PBitConverter.ToSingle(bytes.Slice(4, 4))
-            );
+            return MemoryMarshal.Read<Vector2>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -254,11 +178,7 @@ namespace OpenBlam.Serialization.Materialization
 
             data.Read(bytes);
 
-            return new Vector3(
-                PBitConverter.ToSingle(bytes.Slice(0, 4)),
-                PBitConverter.ToSingle(bytes.Slice(4, 4)),
-                PBitConverter.ToSingle(bytes.Slice(8, 4))
-            );
+            return MemoryMarshal.Read<Vector3>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -271,12 +191,7 @@ namespace OpenBlam.Serialization.Materialization
 
             data.Read(bytes);
 
-            return new Vector4(
-                PBitConverter.ToSingle(bytes.Slice(0, 4)),
-                PBitConverter.ToSingle(bytes.Slice(4, 4)),
-                PBitConverter.ToSingle(bytes.Slice(8, 4)),
-                PBitConverter.ToSingle(bytes.Slice(12, 4))
-            );
+            return MemoryMarshal.Read<Vector4>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -289,12 +204,7 @@ namespace OpenBlam.Serialization.Materialization
 
             data.Read(bytes);
 
-            return new Quaternion(
-                PBitConverter.ToSingle(bytes.Slice(0, 4)),
-                PBitConverter.ToSingle(bytes.Slice(4, 4)),
-                PBitConverter.ToSingle(bytes.Slice(8, 4)),
-                PBitConverter.ToSingle(bytes.Slice(12, 4))
-            );
+            return MemoryMarshal.Read<Quaternion>(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -354,30 +264,7 @@ namespace OpenBlam.Serialization.Materialization
 
             data.Read(bytes);
 
-            return PBitConverter.ToSingle(bytes);
-        }
-
-        private static VecConverter vectorConverter = new VecConverter();
-        private static byte[] vectorConverterBytes = new byte[16];
-
-
-        [StructLayout(LayoutKind.Explicit)]
-        private struct VecConverter
-        {
-            [FieldOffset(0)]
-            public Guid Guid;
-
-            [FieldOffset(0)]
-            public Vector2 Vec2;
-
-            [FieldOffset(0)]
-            public Vector3 Vec3;
-
-            [FieldOffset(0)]
-            public Vector4 Vec4;
-
-            [FieldOffset(0)]
-            public Quaternion Quaternion;
+            return MemoryMarshal.Read<float>(bytes);
         }
     }
 }

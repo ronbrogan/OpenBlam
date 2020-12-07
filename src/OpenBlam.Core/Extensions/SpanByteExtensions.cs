@@ -4,9 +4,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace OpenBlam.Serialization.Materialization
+namespace OpenBlam.Core.Extensions
 {
-    [System.Runtime.CompilerServices.CompilerGenerated]
     public static class SpanByteExtensions
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -23,24 +22,7 @@ namespace OpenBlam.Serialization.Materialization
                 current++;
             }
 
-            // TODO: remove .ToArray() once we're on netstandard2.1+
-            return Encoding.UTF8.GetString(data.Slice(0, current).ToArray());
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static string ToUtf16StringFromNullTerminated(this Span<byte> data)
-        {
-            var i = 0;
-            for (; i < data.Length; i+=2)
-            {
-                if (data[i] == 0b0 && data[i+1] == 0b0)
-                {
-                    break;
-                }
-            }
-
-            // TODO: remove .ToArray() once we're on netstandard2.1+
-            return new string(MemoryMarshal.Cast<byte, char>(data.Slice(0, i)).ToArray());
+            return Encoding.UTF8.GetString(data.Slice(0, current));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -52,11 +34,20 @@ namespace OpenBlam.Serialization.Materialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static string ReadUtf16StringFrom(this Span<byte> data, int offset, int length)
+        public static string ReadStringStarting(this Span<byte> data, int offset)
         {
-            var len = Math.Min(length * 2, data.Length - offset);
+            var current = offset;
+            while (true)
+            {
+                if (data[current] == 0b0)
+                {
+                    break;
+                }
 
-            return data.Slice(offset, len).ToUtf16StringFromNullTerminated();
+                current++;
+            }
+
+            return Encoding.UTF8.GetString(data.Slice(0, current));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -68,7 +59,7 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static short ReadInt16At(this Span<byte> data, int offset)
         {
-            if (offset + 2 > data.Length)
+            if(offset + 2 > data.Length)
             {
                 return 0;
             }
@@ -192,6 +183,50 @@ namespace OpenBlam.Serialization.Materialization
             }
 
             return MemoryMarshal.Read<float>(data.Slice(offset, 4));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteInt16At(this Span<byte> data, int offset, short value)
+        {
+            if (offset + 2 > data.Length)
+            {
+                return;
+            }
+
+            MemoryMarshal.Write<short>(data.Slice(offset), ref value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt16At(this Span<byte> data, int offset, ushort value)
+        {
+            if (offset + 2 > data.Length)
+            {
+                return;
+            }
+
+            MemoryMarshal.Write<ushort>(data.Slice(offset), ref value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteInt32At(this Span<byte> data, int offset, int value)
+        {
+            if (offset + 4 > data.Length)
+            {
+                return;
+            }
+
+            MemoryMarshal.Write<int>(data.Slice(offset), ref value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt32At(this Span<byte> data, int offset, uint value)
+        {
+            if (offset + 4 > data.Length)
+            {
+                return;
+            }
+
+            MemoryMarshal.Write<uint>(data.Slice(offset), ref value);
         }
     }
 }

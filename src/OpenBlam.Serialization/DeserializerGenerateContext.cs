@@ -122,6 +122,8 @@ namespace OpenBlam.Serialization
                 {
                     PrimitiveValueAttribute prim => GeneratePrimitiveValueRead(member, prim, dataTypeSymbol),
                     PrimitiveArrayAttribute arr => GeneratePrimitiveArrayRead(member, arr, dataTypeSymbol),
+                    InPlaceObjectAttribute obj => GenerateInPlaceObjectRead(member, obj, dataTypeSymbol),
+                    ReferenceValueAttribute refVal => GenerateReferenceValueRead(member, refVal, dataTypeSymbol),
                     ReferenceArrayAttribute reference => GenerateReferenceArrayRead(member, reference, dataTypeSymbol),
                     StringValueAttribute str => GenerateStringValueRead(member, str, dataTypeSymbol),
                     Utf16StringValueAttribute str => GenerateStringValueRead(member, str, dataTypeSymbol),
@@ -303,11 +305,11 @@ namespace OpenBlam.Serialization
                         IdentifierName(member.PropertySymbol.Name));
 
             var count = ParseToken("count" + arr.Offset);
-            yield return SyntaxUtils.LocalVar(count, SyntaxUtils.ReadSpanInt32(dataParam, startParam, arr.Offset));
+            yield return SyntaxUtils.LocalVar(count, SyntaxUtils.DataReadInt32(dataParam, startParam, arr.Offset));
 
             var offset = ParseToken("offset" + arr.Offset);
             yield return SyntaxUtils.LocalVar(offset, BinaryExpression(SyntaxKind.SubtractExpression,
-                SyntaxUtils.ReadSpanInt32(dataParam, startParam, arr.Offset+4),
+                SyntaxUtils.DataReadInt32(dataParam, startParam, arr.Offset+4),
                 IdentifierName(offsetParam)));
 
 
@@ -365,6 +367,92 @@ namespace OpenBlam.Serialization
             loopBody.Add(ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, elementAccess, getExp)));
 
             yield return SyntaxUtils.ForLoop(Block(loopBody), 0, IdentifierName(count), loopVar)
+                .WithTrailingTrivia(CarriageReturnLineFeed);
+        }
+
+        private IEnumerable<StatementSyntax> GenerateReferenceValueRead(LayoutInfo.MemberInfo member, ReferenceValueAttribute refVal, ITypeSymbol dataTypeSymbol)
+        {
+            var type = member.Type;
+            bool castToFinal = false;
+
+            if (member.Type.TypeKind == TypeKind.Enum)
+            {
+                type = (member.Type as INamedTypeSymbol).EnumUnderlyingType;
+                castToFinal = true;
+            }
+
+            if (type is INamedTypeSymbol named && named.IsGenericType)
+            {
+                type = named.ConstructUnboundGenericType();
+            }
+
+
+            ExpressionSyntax getExp = InvocationExpression(
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName(nameof(BlamSerializer)),
+                    GenericName(nameof(BlamSerializer.Deserialize))
+                        .AddTypeArgumentListArguments(ParseTypeName(type.ToDisplayString()))))
+                .AddArgumentListArguments(
+                    Argument(IdentifierName(dataParam)),
+                    Argument(BinaryExpression(SyntaxKind.SubtractExpression,
+                        SyntaxUtils.DataReadInt32(dataParam, startParam, refVal.Offset),
+                        IdentifierName(offsetParam))),
+                    Argument(IdentifierName(offsetParam)),
+                    Argument(IdentifierName(stringsParam)));
+
+            if (castToFinal)
+            {
+                getExp = CastExpression(ParseTypeName(member.Type.ToDisplayString()), getExp);
+            }
+
+            yield return ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName(instanceParam),
+                    IdentifierName(member.PropertySymbol.Name)),
+                getExp))
+                .WithTrailingTrivia(CarriageReturnLineFeed);
+        }
+
+        private IEnumerable<StatementSyntax> GenerateInPlaceObjectRead(LayoutInfo.MemberInfo member, InPlaceObjectAttribute obj, ITypeSymbol dataTypeSymbol)
+        {
+            var type = member.Type;
+            bool castToFinal = false;
+
+            if (member.Type.TypeKind == TypeKind.Enum)
+            {
+                type = (member.Type as INamedTypeSymbol).EnumUnderlyingType;
+                castToFinal = true;
+            }
+
+            if (type is INamedTypeSymbol named && named.IsGenericType)
+            {
+                type = named.ConstructUnboundGenericType();
+            }
+
+            
+            ExpressionSyntax getExp = InvocationExpression(
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName(nameof(BlamSerializer)),
+                    GenericName(nameof(BlamSerializer.Deserialize))
+                        .AddTypeArgumentListArguments(ParseTypeName(type.ToDisplayString()))))
+                .AddArgumentListArguments(
+                    Argument(IdentifierName(dataParam)),
+                    Argument(BinaryExpression(SyntaxKind.AddExpression,
+                        IdentifierName(startParam),
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(obj.Offset)))),
+                    Argument(IdentifierName(offsetParam)),
+                    Argument(IdentifierName(stringsParam)));
+
+            if (castToFinal)
+            {
+                getExp = CastExpression(ParseTypeName(member.Type.ToDisplayString()), getExp);
+            }
+
+            yield return ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName(instanceParam),
+                    IdentifierName(member.PropertySymbol.Name)),
+                getExp))
                 .WithTrailingTrivia(CarriageReturnLineFeed);
         }
 
@@ -453,7 +541,7 @@ namespace OpenBlam.Serialization
             if (this.wellKnown.PrimitiveReaders.TryGetValue((type, dataTypeSymbol), out var mi))
             {
                 var internedDataLocal = "interned" + interned.Offset;
-                var internedData = SyntaxUtils.ReadSpanInt32(dataParam, startParam, interned.Offset);
+                var internedData = SyntaxUtils.DataReadInt32(dataParam, startParam, interned.Offset);
                 yield return SyntaxUtils.LocalVar(Identifier(internedDataLocal), internedData);
 
                 var stringIndex = BinaryExpression(SyntaxKind.MultiplyExpression,
