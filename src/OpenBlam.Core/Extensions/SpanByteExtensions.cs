@@ -47,7 +47,7 @@ namespace OpenBlam.Core.Extensions
                 current++;
             }
 
-            return Encoding.UTF8.GetString(data.Slice(0, current));
+            return Encoding.UTF8.GetString(data.Slice(offset, current-offset));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
