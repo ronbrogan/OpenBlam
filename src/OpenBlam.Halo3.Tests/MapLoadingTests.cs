@@ -10,9 +10,9 @@ namespace OpenBlam.Halo3.Tests
         [TestMethod, TestCategory("RequiresMaps")]
         public void Map_Loads()
         {
-            var loader = MapLoader.FromRoot<H3Map>(@"C:\Program Files\ModifiableWindowsApps\HaloMCC\halo3\maps");
+            var loader = MapLoader.FromRoot(@"C:\Program Files\ModifiableWindowsApps\HaloMCC\halo3\maps");
 
-            var map = loader.Load(@"010_jungle.map");
+            var map = loader.Load<H3Map>(@"010_jungle.map");
 
             Assert.IsNotNull(map);
             Assert.IsNotNull(map.Header);

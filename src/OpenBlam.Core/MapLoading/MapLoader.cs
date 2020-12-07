@@ -5,31 +5,28 @@ using System.IO;
 
 namespace OpenBlam.Core.MapLoading
 {
-    public static class MapLoader
-    {
-        public static MapLoader<TMap> FromConfig<TMap>(MapLoaderConfig<TMap> config) where TMap : IMap, new()
-        {
-            return new MapLoader<TMap>(config);
-        }
-
-        public static MapLoader<TMap> FromRoot<TMap>(string mapRoot) where TMap : IMap, new()
-        {
-            return new MapLoader<TMap>(new MapLoaderConfig<TMap>()
-            {
-                MapRoot = mapRoot
-            });
-        }
-    }
-
     /// <summary>
     /// The MapLoader class is responsible for expsosing the map data properly (decompressing, etc if required)
     /// and reading the initial map header. After basic loading, it will invoke the TMap type's methods to 
     /// finish loading the data. 
     /// </summary>
     /// <typeparam name="TMap"></typeparam>
-    public class MapLoader<TMap> where TMap: IMap, new()
+    public class MapLoader
     {
-        private readonly MapLoaderConfig<TMap> config;
+        public static MapLoader FromConfig(MapLoaderConfig config)
+        {
+            return new MapLoader(config);
+        }
+
+        public static MapLoader FromRoot(string mapRoot)
+        {
+            return new MapLoader(new MapLoaderConfig()
+            {
+                MapRoot = mapRoot
+            });
+        }
+
+        private readonly MapLoaderConfig config;
 
         /// <summary>
         /// Creates a MapLoader instance that uses the current directory and has no ancillary maps configured.
@@ -37,21 +34,21 @@ namespace OpenBlam.Core.MapLoading
         /// </summary>
         public MapLoader()
         {
-            this.config = new MapLoaderConfig<TMap>();
+            this.config = new MapLoaderConfig();
         }
 
-        public MapLoader(MapLoaderConfig<TMap> config)
+        public MapLoader(MapLoaderConfig config)
         {
             this.config = config;
         }
 
-        public TMap Load(string mapName)
+        public TMap Load<TMap>(string mapName) where TMap : IMap, new()
         {
             var fs = new ReadOnlyFileStream(Path.Combine(this.config.MapRoot, mapName));
-            return this.Load(fs);
+            return this.Load<TMap>(fs);
         }
 
-        public TMap Load(Stream mapStream)
+        public TMap Load<TMap>(Stream mapStream) where TMap : IMap, new()
         {
             var reader = GetAggregateStream(mapStream);
 
@@ -77,7 +74,7 @@ namespace OpenBlam.Core.MapLoading
             return stream;
         }
 
-        private void Deserialize(TMap scene, MapStream reader)
+        private void Deserialize<TMap>(TMap scene, MapStream reader)
         {
             BlamSerializer.DeserializeInto(scene, reader.Map);
         }

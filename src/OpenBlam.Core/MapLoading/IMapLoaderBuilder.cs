@@ -2,10 +2,10 @@
 
 namespace OpenBlam.Core.MapLoading
 {
-    public interface IMapLoaderBuilder<TMap> where TMap : IMap, new()
+    public interface IMapLoaderBuilder
     {
-        IMapLoaderBuilder<TMap> UseAncillaryMap(byte key, string mapName);
+        IMapLoaderBuilder UseAncillaryMap(byte key, string mapName);
 
-        MapLoader<TMap> Build();
+        MapLoader Build();
     }
 }

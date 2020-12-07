@@ -13,13 +13,13 @@ namespace OpenBlam.Core.Tests.MapLoading
         [TestMethod]
         public void Loader_IsCreated()
         {
-            var loader = MapLoaderBuilder.FromRoot<UnitTestMap>(@"D:\testroot").Build();
+            var loader = MapLoaderBuilder.FromRoot(@"D:\testroot").Build();
             Assert.IsNotNull(loader, "Construction from builder should succeed");
 
-            var loader2 = MapLoader.FromRoot<UnitTestMap>(@"D:\testroot");
+            var loader2 = MapLoader.FromRoot(@"D:\testroot");
             Assert.IsNotNull(loader2, "Construction from root should succeed");
 
-            var config = new MapLoaderConfig<UnitTestMap>()
+            var config = new MapLoaderConfig()
             {
                 MapRoot = @"D:\testroot"
             };
@@ -30,19 +30,19 @@ namespace OpenBlam.Core.Tests.MapLoading
         [TestMethod]
         public void Loader_FailsOnNonSerializable()
         {
-            var loader = new MapLoader<UnitTestMap>();
+            var loader = new MapLoader();
 
             Assert.ThrowsException<NotSupportedException>(() =>
             {
-                var map = loader.Load(new MemoryStream());
+                var map = loader.Load<UnitTestMap>(new MemoryStream());
             });
         }
 
         [TestMethod]
         public void Loader_InvokesLoadMethod()
         {
-            var loader = new MapLoader<DeserializableUnitTestMap>();
-            var map = loader.Load(new MemoryStream());
+            var loader = new MapLoader();
+            var map = loader.Load<DeserializableUnitTestMap>(new MemoryStream());
             Assert.IsTrue(map.DoneLoading);
         }
     }

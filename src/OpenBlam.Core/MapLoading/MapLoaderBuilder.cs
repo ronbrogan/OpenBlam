@@ -5,13 +5,13 @@ namespace OpenBlam.Core.MapLoading
 {
     public static class MapLoaderBuilder
     {
-        public static IMapLoaderBuilder<TMap> FromRoot<TMap>(string mapRoot) where TMap : IMap, new()
+        public static IMapLoaderBuilder FromRoot(string mapRoot)
         {
-            return new MapLoaderBuilderImpl<TMap>(mapRoot);
+            return new MapLoaderBuilderImpl(mapRoot);
         }
     }
 
-    internal class MapLoaderBuilderImpl<TMap> : IMapLoaderBuilder<TMap> where TMap : IMap, new()
+    internal class MapLoaderBuilderImpl : IMapLoaderBuilder
     {
         private readonly string mapRoot;
         private Dictionary<byte, string> ancillaryMaps = new();
@@ -21,15 +21,15 @@ namespace OpenBlam.Core.MapLoading
             this.mapRoot = mapRoot;
         }
 
-        public IMapLoaderBuilder<TMap> UseAncillaryMap(byte key, string mapName)
+        public IMapLoaderBuilder UseAncillaryMap(byte key, string mapName)
         {
             ancillaryMaps.Add(key, mapName);
             return this;
         }
 
-        public MapLoader<TMap> Build()
+        public MapLoader Build()
         {
-            return new MapLoader<TMap>(new MapLoaderConfig<TMap>()
+            return new MapLoader(new MapLoaderConfig()
             {
                 MapRoot = this.mapRoot,
                 AncillaryMaps = this.ancillaryMaps

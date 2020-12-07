@@ -4,7 +4,7 @@ using System.IO;
 
 namespace OpenBlam.Core.MapLoading
 {
-    public class MapLoaderConfig<TMap> where TMap : IMap
+    public class MapLoaderConfig
     {
         public string MapRoot { get; set; } = Directory.GetCurrentDirectory();
 
