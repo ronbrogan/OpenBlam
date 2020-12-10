@@ -5,12 +5,13 @@ using System.IO;
 
 namespace OpenBlam.Core.MapLoading
 {
+    public delegate void MapLoadCallback(IMap map, Stream mapStream);
+
     /// <summary>
     /// The MapLoader class is responsible for expsosing the map data properly (decompressing, etc if required)
     /// and reading the initial map header. After basic loading, it will invoke the TMap type's methods to 
     /// finish loading the data. 
     /// </summary>
-    /// <typeparam name="TMap"></typeparam>
     public class MapLoader
     {
         public static MapLoader FromConfig(MapLoaderConfig config)
@@ -42,21 +43,36 @@ namespace OpenBlam.Core.MapLoading
             this.config = config;
         }
 
-        public TMap Load<TMap>(string mapName) where TMap : IMap, new()
+        /// <summary>
+        /// Loads the specified file as a map.
+        /// </summary>
+        /// <param name="mapName">The filename to load map data from. Will be combined with the current config's MapRoot</param>
+        /// <param name="loadCallback">An optional callback that will be invoked after each map is created</param>
+        public TMap Load<TMap>(string mapName, MapLoadCallback loadCallback = null) where TMap : IMap, new()
         {
             var fs = new ReadOnlyFileStream(Path.Combine(this.config.MapRoot, mapName));
-            return this.Load<TMap>(fs);
+            return this.Load<TMap>(fs, loadCallback);
         }
 
-        public TMap Load<TMap>(Stream mapStream) where TMap : IMap, new()
+        /// <summary>
+        /// Loads the specified stream as a map.
+        /// </summary>
+        /// <param name="mapStream">The stream to load data from</param>
+        /// <param name="loadCallback">An optional callback that will be invoked after each map is created</param>
+        public TMap Load<TMap>(Stream mapStream, MapLoadCallback loadCallback = null) where TMap : IMap, new()
         {
             var reader = GetAggregateStream(mapStream);
 
-            var map = new TMap();
+            var map = this.CreateMap<TMap>(reader);
 
-            this.Deserialize(map, reader);
+            foreach(var id in config.AncillaryMaps.Keys)
+            {
+                var anc = this.CreateMap<TMap>(reader, id);
+                map.UseAncillaryMap(id, anc);
+                loadCallback?.Invoke(anc, reader.GetStream(id));
+            }
 
-            map.Load(reader);
+            loadCallback?.Invoke(map, reader.Map);
 
             return map;
         }
@@ -74,9 +90,12 @@ namespace OpenBlam.Core.MapLoading
             return stream;
         }
 
-        private void Deserialize<TMap>(TMap scene, MapStream reader)
+        private TMap CreateMap<TMap>(MapStream reader, byte streamId = 0) where TMap : IMap, new()
         {
-            BlamSerializer.DeserializeInto(scene, reader.Map);
+            var map = new TMap();
+            BlamSerializer.DeserializeInto(map, reader.GetStream(streamId));
+            map.Load(streamId, reader);
+            return map;
         }
     }
 }

@@ -1,6 +1,8 @@
 ﻿using OpenBlam.Core.Exceptions;
+using OpenBlam.Serialization.Materialization;
 using System;
 using System.IO;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace OpenBlam.Core.Streams
@@ -10,7 +12,7 @@ namespace OpenBlam.Core.Streams
     /// values in a forward manner.
     /// Is NOT thread safe
     /// </summary>
-    public class ReadOnlyFileStream : Stream
+    public class ReadOnlyFileStream : BinaryReadableStream
     {
         internal const int BufferSize = 80000;
         private FileStream fs;
@@ -20,6 +22,9 @@ namespace OpenBlam.Core.Streams
         private int bufferOffset = 0;
         /// <summary>Where Stream.Position (absolute) points to in buffer</summary>
         private int internalOffset = 0;
+
+        private int validBufferDataLength = 0;
+
         private int position => bufferOffset + internalOffset;
 
         public override bool CanRead => true;
@@ -36,31 +41,67 @@ namespace OpenBlam.Core.Streams
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte ReadByteAt(int offset) => buffer[EnsureRead(offset, 1)];
+        public override byte ReadByteAt(int offset) => buffer[EnsureRead(offset, 1)];
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public short ReadInt16At(int offset)
+        public override short ReadInt16At(int offset)
         {
             return Unsafe.ReadUnaligned<short>(ref this.buffer[EnsureRead(offset, 2)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int ReadInt32At(int offset)
-        {
-            return Unsafe.ReadUnaligned<int>(ref this.buffer[EnsureRead(offset, 4)]);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ushort ReadUInt16At(int offset)
+        public override ushort ReadUInt16At(int offset)
         {
             return Unsafe.ReadUnaligned<ushort>(ref this.buffer[EnsureRead(offset, 2)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint ReadUInt32At(int offset)
+        public override int ReadInt32At(int offset)
+        {
+            return Unsafe.ReadUnaligned<int>(ref this.buffer[EnsureRead(offset, 4)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override uint ReadUInt32At(int offset)
         {
             return Unsafe.ReadUnaligned<uint>(ref this.buffer[EnsureRead(offset, 4)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override float ReadFloatAt(int offset)
+        {
+            return Unsafe.ReadUnaligned<float>(ref this.buffer[EnsureRead(offset, 4)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override double ReadDoubleAt(int offset)
+        {
+            return Unsafe.ReadUnaligned<double>(ref this.buffer[EnsureRead(offset, 8)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override Vector2 ReadVec2At(int offset)
+        {
+            return Unsafe.ReadUnaligned<Vector2>(ref this.buffer[EnsureRead(offset, 8)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override Vector3 ReadVec3At(int offset)
+        {
+            return Unsafe.ReadUnaligned<Vector3>(ref this.buffer[EnsureRead(offset, 12)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override Vector4 ReadVec4At(int offset)
+        {
+            return Unsafe.ReadUnaligned<Vector4>(ref this.buffer[EnsureRead(offset, 16)]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override Quaternion ReadQuaternionAt(int offset)
+        {
+            return Unsafe.ReadUnaligned<Quaternion>(ref this.buffer[EnsureRead(offset, 16)]);
         }
 
         /// <summary>
@@ -75,7 +116,7 @@ namespace OpenBlam.Core.Streams
             if (length > BufferSize) Throw.NotSupported("Desired data is too large for this API");
 
             // current <= desired && desired end < currentEnd
-            if(this.bufferOffset <= desiredOffset && desiredOffset + length <= this.bufferOffset + BufferSize)
+            if(this.bufferOffset <= desiredOffset && desiredOffset + length <= this.bufferOffset + this.validBufferDataLength)
             {
                 this.internalOffset = (desiredOffset - this.bufferOffset) + length;
                 return desiredOffset - this.bufferOffset;
@@ -85,18 +126,30 @@ namespace OpenBlam.Core.Streams
                 this.fs.Position = desiredOffset;
                 this.bufferOffset = desiredOffset;
                 this.internalOffset = length;
-                this.fs.Read(this.buffer);
+                this.validBufferDataLength = this.fs.Read(this.buffer);
                 return 0;
             }
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var capable = Math.Min(BufferSize, count);
+            // Handle larger than internal buffer reads separately
+            if(count > this.validBufferDataLength)
+            {
+                this.fs.Position = this.position;
+                var amountRead = fs.Read(buffer, offset, count);
 
-            var start = EnsureRead(this.position, capable);
-            Buffer.BlockCopy(this.buffer, start, buffer, offset, capable);
-            return capable;
+                // Update internal buffer, prep for next read
+                this.bufferOffset = this.position + amountRead;
+                this.internalOffset = 0;
+                this.validBufferDataLength = this.fs.Read(this.buffer);
+                return amountRead;
+            }
+
+            var start = EnsureRead(this.position, count);
+            var availableData = Math.Min(this.validBufferDataLength, count);
+            Buffer.BlockCopy(this.buffer, start, buffer, offset, availableData);
+            return count;
         }
 
         public ReadOnlySpan<byte> Read(int offset, int count)

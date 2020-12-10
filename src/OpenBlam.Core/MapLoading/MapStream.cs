@@ -7,21 +7,19 @@ namespace OpenBlam.Core.MapLoading
     public class MapStream
     {
         private readonly Stream map;
-        private List<Stream> ancillaryMaps = new List<Stream>();
+        private Dictionary<int, Stream> ancillaryMaps = new();
 
         public MapStream(Stream map)
         {
             this.map = map;
         }
 
-        public void UseAncillaryMap(byte key, Stream map)
+        internal void UseAncillaryMap(byte key, Stream map)
         {
             if(key == 0)
             {
                 throw new ArgumentException(nameof(key), "Ancillary maps can only be index 1 or greater");
             }
-
-            ancillaryMaps.Capacity = key;
 
             ancillaryMaps[key] = map;
         }

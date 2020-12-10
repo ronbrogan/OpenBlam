@@ -80,6 +80,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte ReadByteAt(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadByteAt(offset);
+
             if (data.Position != offset)
                 data.Position = offset;
 
@@ -89,6 +92,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static short ReadInt16At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin) 
+                return bin.ReadInt16At(offset);
+
             Span<byte> bytes = stackalloc byte[2];
 
             if (data.Position != offset)
@@ -105,6 +111,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ReadInt32At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadInt32At(offset);
+
             Span<byte> bytes = stackalloc byte[4];
 
             if (data.Position != offset)
@@ -121,6 +130,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ushort ReadUInt16At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadUInt16At(offset);
+
             Span<byte> bytes = stackalloc byte[2];
 
             if (data.Position != offset)
@@ -134,11 +146,12 @@ namespace OpenBlam.Serialization.Materialization
             return MemoryMarshal.Read<ushort>(bytes);
         }
 
-        private static byte[] buffer = new byte[16];
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint ReadUInt32At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadUInt32At(offset);
+
             Span<byte> bytes = stackalloc byte[4];
 
             if (data.Position != offset)
@@ -155,6 +168,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector2 ReadVec2At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadVec2At(offset);
+
             Span<byte> bytes = stackalloc byte[8];
 
             if (data.Position != offset)
@@ -171,6 +187,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 ReadVec3At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadVec3At(offset);
+
             Span<byte> bytes = stackalloc byte[12];
 
             if (data.Position != offset)
@@ -184,6 +203,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector4 ReadVec4At(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadVec4At(offset);
+
             Span<byte> bytes = stackalloc byte[16];
 
             if (data.Position != offset)
@@ -197,6 +219,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion ReadQuaternionAt(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadQuaternionAt(offset);
+
             Span<byte> bytes = stackalloc byte[16];
 
             if (data.Position != offset)
@@ -257,6 +282,9 @@ namespace OpenBlam.Serialization.Materialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ReadFloatAt(this Stream data, int offset)
         {
+            if (data is BinaryReadableStream bin)
+                return bin.ReadFloatAt(offset);
+
             Span<byte> bytes = stackalloc byte[4];
 
             if (data.Position != offset)

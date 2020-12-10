@@ -1,7 +1,9 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OpenBlam.Core.Streams;
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace OpenBlam.Core.Tests.Streams
 {
@@ -88,6 +90,64 @@ namespace OpenBlam.Core.Tests.Streams
                 rofs.Position = pos;
 
                 Assert.AreEqual(reader.ReadUInt32(), roreader.ReadUInt32(), $"Failed on {i}");
+            }
+        }
+
+        [TestMethod]
+        public void UintReader_ValuesMatch_InterleavedReads()
+        {
+            using var fs = new FileStream(testFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = new BinaryReader(fs);
+            using var rofs = new ReadOnlyFileStream(testFilePath);
+            using var roreader = new BinaryReader(rofs);
+
+            var b = new byte[500];
+            var b2 = new byte[500];
+
+            for (var i = 0; i < values; i++)
+            {
+                if(i % 20 == 0)
+                {
+                    if (i * 4 == 1279520) Debugger.Break();
+
+                    var fread = fs.Read(b, 0, b.Length);
+                    var roread = rofs.Read(b2, 0, b2.Length);
+
+                    Assert.IsTrue(b.SequenceEqual(b2), $"Read at {i*4} did not equal");
+                    fs.Position -= fread;
+                    rofs.Position -= roread;
+                }
+
+                Assert.AreEqual(reader.ReadUInt32(), roreader.ReadUInt32());
+            }
+        }
+
+        [TestMethod]
+        public void UintReader_ValuesMatch_InterleavedReads_Large()
+        {
+            using var fs = new FileStream(testFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = new BinaryReader(fs);
+            using var rofs = new ReadOnlyFileStream(testFilePath);
+            using var roreader = new BinaryReader(rofs);
+
+            var b = new byte[100000];
+            var b2 = new byte[100000];
+
+            for (var i = 0; i < values; i++)
+            {
+                if (i % 20 == 0)
+                {
+                    if (i * 4 == 1279520) Debugger.Break();
+
+                    var fread = fs.Read(b, 0, b.Length);
+                    var roread = rofs.Read(b2, 0, b2.Length);
+
+                    Assert.IsTrue(b.SequenceEqual(b2), $"Read at {i * 4} did not equal");
+                    fs.Position -= fread;
+                    rofs.Position -= roread;
+                }
+
+                Assert.AreEqual(reader.ReadUInt32(), roreader.ReadUInt32());
             }
         }
 

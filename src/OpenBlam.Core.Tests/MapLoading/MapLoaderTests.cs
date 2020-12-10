@@ -49,7 +49,11 @@ namespace OpenBlam.Core.Tests.MapLoading
 
     public class UnitTestMap : IMap
     {
-        public void Load(MapStream mapStream)
+        public void Load(byte selfIdentifier, MapStream mapStream)
+        {
+        }
+
+        public void UseAncillaryMap(byte identifier, IMap ancillaryMap)
         {
         }
     }
@@ -59,9 +63,13 @@ namespace OpenBlam.Core.Tests.MapLoading
     {
         public bool DoneLoading = false;
 
-        public void Load(MapStream mapStream)
+        public void Load(byte selfIdentifier, MapStream mapStream)
         {
             DoneLoading = true;
+        }
+
+        public void UseAncillaryMap(byte identifier, IMap ancillaryMap)
+        {
         }
     }
 }
