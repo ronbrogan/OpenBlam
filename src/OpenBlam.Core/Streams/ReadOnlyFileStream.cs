@@ -19,19 +19,19 @@ namespace OpenBlam.Core.Streams
         private long fsLength;
         private byte[] buffer = new byte[BufferSize];
         /// <summary>Where data[0] is from in the stream</summary>
-        private int bufferOffset = 0;
+        private long bufferOffset = 0;
         /// <summary>Where Stream.Position (absolute) points to in buffer</summary>
-        private int internalOffset = 0;
+        private long internalOffset = 0;
 
         private int validBufferDataLength = 0;
 
-        private int position => bufferOffset + internalOffset;
+        private long position => bufferOffset + internalOffset;
 
         public override bool CanRead => true;
         public override bool CanSeek => true;
         public override bool CanWrite => false;
         public override long Length => fsLength;
-        public override long Position { get => position; set => EnsureRead((int)value, 0); }
+        public override long Position { get => position; set => EnsureRead(value, 0); }
 
         public ReadOnlyFileStream(string path)
         {
@@ -111,7 +111,7 @@ namespace OpenBlam.Core.Streams
         /// <param name="length">The amount of data that is needed</param>
         /// <returns>The offset that should be read from within the current buffer</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int EnsureRead(int desiredOffset, int length)
+        private int EnsureRead(long desiredOffset, int length)
         {
             if (length > BufferSize) Throw.NotSupported("Desired data is too large for this API");
 
@@ -119,7 +119,7 @@ namespace OpenBlam.Core.Streams
             if(this.bufferOffset <= desiredOffset && desiredOffset + length <= this.bufferOffset + this.validBufferDataLength)
             {
                 this.internalOffset = (desiredOffset - this.bufferOffset) + length;
-                return desiredOffset - this.bufferOffset;
+                return (int)(desiredOffset - this.bufferOffset);
             }
             else
             {
@@ -157,7 +157,13 @@ namespace OpenBlam.Core.Streams
             return ((Span<byte>)this.buffer).Slice(EnsureRead(offset, count));
         }
 
-        public override long Seek(long offset, SeekOrigin origin) => fs.Seek(offset, origin);
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            var newPos = fs.Seek(offset, origin);
+            EnsureRead(newPos, 0);
+            return newPos;
+        }
+
         public override void Flush() { }
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
