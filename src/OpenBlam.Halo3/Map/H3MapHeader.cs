@@ -45,7 +45,7 @@ namespace OpenBlam.Halo3.Map
         [PrimitiveValue(716)]
         public uint TagNamesIndexOffset { get; set; }
 
-        // list of int that appear to index into some string blob
+        // list of int that appear to index into some string blob, same as @356?
         // Snowbound: 0,1,9,18,27,37,47
         [PrimitiveValue(1220)] 
         public uint Offset2 { get; set; }

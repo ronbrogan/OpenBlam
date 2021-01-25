@@ -243,22 +243,22 @@ namespace OpenBlam.Serialization.Materialization
             data.Read(bytes);
 
             return new Matrix4x4(
-                bytes.ReadFloatAt(4 * 0), //1
-                bytes.ReadFloatAt(4 * 4), //1
-                bytes.ReadFloatAt(4 * 8), //1
-                bytes.ReadFloatAt(4 * 12),//1
-                bytes.ReadFloatAt(4 * 1), //2
-                bytes.ReadFloatAt(4 * 5), //2
-                bytes.ReadFloatAt(4 * 9), //2
-                bytes.ReadFloatAt(4 * 13),//2
-                bytes.ReadFloatAt(4 * 2), //3
-                bytes.ReadFloatAt(4 * 6), //3
-                bytes.ReadFloatAt(4 * 10),//3
-                bytes.ReadFloatAt(4 * 14),//3
-                bytes.ReadFloatAt(4 * 3), //4
-                bytes.ReadFloatAt(4 * 7), //4
-                bytes.ReadFloatAt(4 * 11),//4
-                bytes.ReadFloatAt(4 * 15) //4
+                bytes.ReadFloatAt(4 * 0),
+                bytes.ReadFloatAt(4 * 1),
+                bytes.ReadFloatAt(4 * 2),
+                bytes.ReadFloatAt(4 * 3),
+                bytes.ReadFloatAt(4 * 4),
+                bytes.ReadFloatAt(4 * 5),
+                bytes.ReadFloatAt(4 * 6),
+                bytes.ReadFloatAt(4 * 7),
+                bytes.ReadFloatAt(4 * 8),
+                bytes.ReadFloatAt(4 * 9),
+                bytes.ReadFloatAt(4 * 10),
+                bytes.ReadFloatAt(4 * 11),
+                bytes.ReadFloatAt(4 * 12),
+                bytes.ReadFloatAt(4 * 13),
+                bytes.ReadFloatAt(4 * 14),
+                bytes.ReadFloatAt(4 * 15)
             );
         }
 

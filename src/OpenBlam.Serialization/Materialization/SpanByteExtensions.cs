@@ -159,22 +159,22 @@ namespace OpenBlam.Serialization.Materialization
             var matrixBytes = data.Slice(offset, 64);
 
             return new Matrix4x4(
-                matrixBytes.ReadFloatAt(4 * 0), //1
-                matrixBytes.ReadFloatAt(4 * 4), //1
-                matrixBytes.ReadFloatAt(4 * 8), //1
-                matrixBytes.ReadFloatAt(4 * 12),//1
-                matrixBytes.ReadFloatAt(4 * 1), //2
-                matrixBytes.ReadFloatAt(4 * 5), //2
-                matrixBytes.ReadFloatAt(4 * 9), //2
-                matrixBytes.ReadFloatAt(4 * 13),//2
-                matrixBytes.ReadFloatAt(4 * 2), //3
-                matrixBytes.ReadFloatAt(4 * 6), //3
-                matrixBytes.ReadFloatAt(4 * 10),//3
-                matrixBytes.ReadFloatAt(4 * 14),//3
-                matrixBytes.ReadFloatAt(4 * 3), //4
-                matrixBytes.ReadFloatAt(4 * 7), //4
-                matrixBytes.ReadFloatAt(4 * 11),//4
-                matrixBytes.ReadFloatAt(4 * 15) //4
+                matrixBytes.ReadFloatAt(4 * 0),
+                matrixBytes.ReadFloatAt(4 * 1),
+                matrixBytes.ReadFloatAt(4 * 2),
+                matrixBytes.ReadFloatAt(4 * 3),
+                matrixBytes.ReadFloatAt(4 * 4),
+                matrixBytes.ReadFloatAt(4 * 5),
+                matrixBytes.ReadFloatAt(4 * 6),
+                matrixBytes.ReadFloatAt(4 * 7),
+                matrixBytes.ReadFloatAt(4 * 8),
+                matrixBytes.ReadFloatAt(4 * 9),
+                matrixBytes.ReadFloatAt(4 * 10),
+                matrixBytes.ReadFloatAt(4 * 11),
+                matrixBytes.ReadFloatAt(4 * 12),
+                matrixBytes.ReadFloatAt(4 * 13),
+                matrixBytes.ReadFloatAt(4 * 14),
+                matrixBytes.ReadFloatAt(4 * 15)
             );
         }
 
