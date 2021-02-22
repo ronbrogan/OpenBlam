@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -11,6 +12,28 @@ namespace OpenBlam.Core.Compression
     internal static class DeflateConstants
     {
         public const int EndOfBlock = 256;
+
+        public static ushort[] LengthBase = new ushort[] 
+        {
+            3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51,
+            59, 67, 83, 99, 115, 131, 163, 195, 227, 258
+        };
+
+        public static ushort[] LengthExtraBits = new ushort[] 
+        {
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
+        };
+
+        public static ushort[] DistanceBase = new ushort[] 
+        {
+            1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 
+            1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
+        };
+
+        public static ushort[] DistanceExtraBits = new ushort[] 
+        {
+            0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13
+        };
     }
 
     public class DeflateDecompressor
@@ -50,7 +73,9 @@ namespace OpenBlam.Core.Compression
                 }
                 else
                 {
-                    while(true)
+                    Span<byte> buf = stackalloc byte[258];
+
+                    while (true)
                     {
                         // decode literal/length value from input stream
                         var value = currentBlock.GetNextValue();
@@ -63,13 +88,21 @@ namespace OpenBlam.Core.Compression
                         if(value < 256)
                         {
                             //copy value(literal byte) to output stream
+                            output.WriteByte((byte)value);
                         }
                         else // value = 257..285
                         {
-                            // decode distance from input stream
+                            var (length, distance) = currentBlock.GetLengthAndDistance(value);
 
                             // move backwards distance bytes in the output stream
+                            var head = output.Position;
+
+                            output.Position -= distance;
+                            output.Read(buf.Slice(0, length));
+
                             // copy length bytes from this position to the output stream
+                            output.Position = head;
+                            output.Write(buf.Slice(0, length));
                         }
                     }
                 }
@@ -113,7 +146,14 @@ namespace OpenBlam.Core.Compression
 
             public ushort GetNextValue()
             {
-                return this.HuffmanTree.GetValue(ref CurrentBit);
+                return this.HuffmanTree.GetValue(Compressed, ref CurrentBit);
+            }
+
+            public (ushort length, ushort distance) GetLengthAndDistance(ushort rawValue)
+            {
+                var length = this.HuffmanTree.GetLength(Compressed, rawValue, ref CurrentBit);
+                var distance = this.HuffmanTree.GetDistance(Compressed, ref CurrentBit);
+                return (length, distance);
             }
         }
 
@@ -134,7 +174,8 @@ namespace OpenBlam.Core.Compression
             public readonly byte DistanceCodeCount;
             public readonly byte CodeLengthCodeCount;
 
-            private TreeNode[] tree;
+            private TreeNode[] literalLengthTree;
+            private TreeNode[] distanceTree;
 
             public HuffmanTree(byte[] compressed, ref ulong currentBit)
             {
@@ -214,11 +255,88 @@ namespace OpenBlam.Core.Compression
                     ref currentBit,
                     LiteralLengthCodeCount, 
                     DistanceCodeCount);
+
+                this.literalLengthTree = GenerateTreeNodes(literalLengths);
+                this.distanceTree = GenerateTreeNodes(distanceLengths);
             }
 
-            public ushort GetValue(ref ulong start)
+            public ushort GetValue(byte[] data, ref ulong currentBit)
             {
-                return 0;
+                var node = this.literalLengthTree[0];
+                while (true)
+                {
+                    if (node.Branches == 0)
+                    {
+                        return node.Value;
+                    }
+
+                    var nextBit = IsSet(data, currentBit);
+                    node = nextBit ? this.literalLengthTree[node.Right] : this.literalLengthTree[node.Left];
+                    currentBit++;
+                }
+            }
+
+            public ushort GetLength(byte[] data, ushort value, ref ulong currentBit)
+            {
+                Debug.Assert(value > 256, "Value must be in the 'length' range");
+
+                var index = value - 257;
+
+                var extraBitsVal = ReadBitsAsUshort(data, DeflateConstants.LengthExtraBits[index], ref currentBit);
+                return (ushort)(DeflateConstants.LengthBase[index] + extraBitsVal);
+            }
+
+            public ushort GetDistance(byte[] data, ref ulong currentBit)
+            {
+                if(this.distanceTree == null)
+                {
+                    // read 5 bits instead
+                    ReadBitsAsUshort(data, 5, ref currentBit);
+                }
+
+                var node = this.distanceTree[0];
+                ushort value;
+                while (true)
+                {
+                    if (node.Branches == 0)
+                    {
+                        value = node.Value;
+                        break;
+                    }
+
+                    var nextBit = IsSet(data, currentBit);
+                    node = nextBit ? this.distanceTree[node.Right] : this.distanceTree[node.Left];
+                    currentBit++;
+                }
+
+                // do distance extra bits
+                Debug.Assert(value < 30, "Value must be in 'distance' range");
+
+                var extraBitsVal = ReadBitsAsUshort(data, DeflateConstants.DistanceExtraBits[value], ref currentBit);
+                return (ushort)(DeflateConstants.DistanceBase[value] + extraBitsVal);
+            }
+
+            private static bool IsSet(byte[] data, ulong currentBit) => ((data[currentBit >> 3] >> (byte)(currentBit & 7)) & 1) == 1;
+
+            private ushort ReadBitsAsUshort(byte[] data, int bits, ref ulong currentBit)
+            {
+                Debug.Assert(bits < 16, "Only uint16 is supported here");
+
+                var value = 0;
+                var setBit = 1 << bits - 1;
+                for (var i = 0; i < bits; i++)
+                {
+                    value >>= 1;
+
+                    if (IsSet(data, currentBit))
+                    {
+                        value |= setBit;
+                    }
+
+                    currentBit++;
+                }
+
+                return (ushort)value;
             }
 
             // Incoming array maps alphabet value (index) to the code length required to walk to the value
@@ -351,7 +469,8 @@ namespace OpenBlam.Core.Compression
                     }
                 }
 
-                // TODO: build from lengths
+                this.literalLengthTree = GenerateTreeNodes(fixedLengths);
+                this.distanceTree = null;
             }
 
             private class CodeLengthHuffmanTree
@@ -373,8 +492,6 @@ namespace OpenBlam.Core.Compression
                     var literalLengths = new byte[AlphabetSize];
                     var distanceLengths = new byte[DistanceValuesSize];
 
-                    var bitStream = "";
-
                     var valuesProduced = 0;
                     byte lastValueProduced = 0;
                     while(valuesProduced < valuesToProduce)
@@ -391,7 +508,6 @@ namespace OpenBlam.Core.Compression
                             }
 
                             var nextBit = IsSet(currentBit);
-                            bitStream += nextBit ? "1" : "0";
                             node = nextBit ? tree[node.Right] : tree[node.Left];
                             currentBit++;
                         }
