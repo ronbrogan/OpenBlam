@@ -49,7 +49,7 @@ namespace OpenBlam.Core.Compression
 
             do
             {
-                currentBlock = new Block(compressed, currentBit);
+                currentBlock = new Block(compressed, ref currentBit);
 
                 if(currentBlock.Type == BlockType.NoCompression)
                 {
@@ -82,10 +82,11 @@ namespace OpenBlam.Core.Compression
 
                         if(value == DeflateConstants.EndOfBlock) // end of block
                         {
+                            currentBit = currentBlock.CurrentBit;
                             break;
                         }
 
-                        if(value < 256)
+                        if(value < DeflateConstants.EndOfBlock)
                         {
                             //copy value(literal byte) to output stream
                             output.WriteByte((byte)value);
@@ -98,11 +99,20 @@ namespace OpenBlam.Core.Compression
                             var head = output.Position;
 
                             output.Position -= distance;
-                            output.Read(buf.Slice(0, length));
+                            var amountRead = output.Read(buf.Slice(0, length));
 
                             // copy length bytes from this position to the output stream
                             output.Position = head;
-                            output.Write(buf.Slice(0, length));
+
+                            // More 'length' can need to be written than available in the output buffer
+                            // When this happens, repeatedly write until satisfied
+                            var amountWritten = 0;
+                            while(amountWritten < length)
+                            {
+                                var pending = length - amountWritten;
+                                output.Write(buf.Slice(0, Math.Min(pending, amountRead)));
+                                amountWritten += amountRead;
+                            }
                         }
                     }
                 }
@@ -120,15 +130,15 @@ namespace OpenBlam.Core.Compression
             public bool IsFinal;
             public BlockType Type;
 
-            public Block(byte[] compressed, ulong start)
+            public Block(byte[] compressed, ref ulong start)
             {
                 Compressed = compressed;
-                var partialByte = compressed[start >> 3];
-                var bitOffset = (byte)(start & 7);
-                IsFinal = ((partialByte >> (bitOffset)) & 1) == 1;
-                Type = (BlockType)((partialByte >> (1 - bitOffset)) & 3);
+                CurrentBit = start;                
 
-                CurrentBit = start + 3;
+                IsFinal = IsSet(compressed, CurrentBit);
+                CurrentBit++;
+
+                Type = (BlockType)ReadBitsAsUshort(compressed, 2, ref CurrentBit);
 
                 if(Type == BlockType.DynamicHuffmanCodes)
                 {
@@ -142,6 +152,29 @@ namespace OpenBlam.Core.Compression
                 {
                     HuffmanTree = null;
                 }
+            }
+
+            private static bool IsSet(byte[] data, ulong currentBit) => ((data[currentBit >> 3] >> (byte)(currentBit & 7)) & 1) == 1;
+
+            private static ushort ReadBitsAsUshort(byte[] data, int bits, ref ulong currentBit)
+            {
+                Debug.Assert(bits < 16, "Only uint16 is supported here");
+
+                var value = 0;
+                var setBit = 1 << bits - 1;
+                for (var i = 0; i < bits; i++)
+                {
+                    value >>= 1;
+
+                    if (IsSet(data, currentBit))
+                    {
+                        value |= setBit;
+                    }
+
+                    currentBit++;
+                }
+
+                return (ushort)value;
             }
 
             public ushort GetNextValue()
@@ -560,7 +593,7 @@ namespace OpenBlam.Core.Compression
 
                     void ProduceValue(byte value)
                     {
-                        if(valuesProduced <= literalLengthCodeCount)
+                        if(valuesProduced < literalLengthCodeCount)
                         {
                             literalLengths[valuesProduced] = value;
                         }

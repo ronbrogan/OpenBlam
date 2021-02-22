@@ -23,15 +23,15 @@ namespace OpenBlam.Core.Benchmarks
             var rand = new Random(42);
 
             UnCompressed_1MiB = new byte[1024 * 1024 * 1];
-            rand.NextBytes(UnCompressed_1MiB);
+            Fill(UnCompressed_1MiB);
             Compressed_1MiB = Compress(UnCompressed_1MiB);
 
             UnCompressed_10MiB = new byte[1024 * 1024 * 10];
-            rand.NextBytes(UnCompressed_10MiB);
+            Fill(UnCompressed_10MiB);
             Compressed_10MiB = Compress(UnCompressed_10MiB);
 
             UnCompressed_50MiB = new byte[1024 * 1024 * 50];
-            rand.NextBytes(UnCompressed_50MiB);
+            Fill(UnCompressed_50MiB);
             Compressed_50MiB = Compress(UnCompressed_50MiB);
         }
 
@@ -74,6 +74,21 @@ namespace OpenBlam.Core.Benchmarks
             }
 
             return output.ToArray();
+        }
+
+        private void Fill(byte[] data)
+        {
+            var rand = new Random(42);
+            var current = (byte)rand.Next(0, 255);
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = current;
+
+                if (current == 0 || i % current == 0)
+                {
+                    current = (byte)rand.Next(0, 255);
+                }
+            }
         }
 
         public class CompressedSize

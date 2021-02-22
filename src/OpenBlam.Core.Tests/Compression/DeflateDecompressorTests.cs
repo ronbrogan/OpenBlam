@@ -22,15 +22,15 @@ namespace OpenBlam.Core.Tests.Compression
             var rand = new Random(42);
 
             UnCompressed_1MiB = new byte[1024 * 1024 * 1];
-            rand.NextBytes(UnCompressed_1MiB);
+            Fill(UnCompressed_1MiB);
             Compressed_1MiB = Compress(UnCompressed_1MiB);
 
             UnCompressed_10MiB = new byte[1024 * 1024 * 10];
-            rand.NextBytes(UnCompressed_10MiB);
+            Fill(UnCompressed_10MiB);
             Compressed_10MiB = Compress(UnCompressed_10MiB);
 
             UnCompressed_50MiB = new byte[1024 * 1024 * 50];
-            rand.NextBytes(UnCompressed_50MiB);
+            Fill(UnCompressed_50MiB);
             Compressed_50MiB = Compress(UnCompressed_50MiB);
         }
 
@@ -42,7 +42,7 @@ namespace OpenBlam.Core.Tests.Compression
 
             var decompressed = DeflateDecompressor.Decompress(compressed);
 
-            Assert.IsTrue(MemoryExtensions.SequenceEqual<byte>(Encoding.UTF8.GetBytes(data), decompressed));
+            Assert.AreEqual(data, Encoding.UTF8.GetString(decompressed));
         }
 
         [TestMethod]
@@ -50,7 +50,7 @@ namespace OpenBlam.Core.Tests.Compression
         {
             var decompressed = DeflateDecompressor.Decompress(Compressed_1MiB);
 
-            Assert.IsTrue(MemoryExtensions.SequenceEqual<byte>(UnCompressed_1MiB, decompressed));
+            CollectionAssert.AreEqual(UnCompressed_1MiB, decompressed);
         }
 
         [TestMethod]
@@ -58,7 +58,7 @@ namespace OpenBlam.Core.Tests.Compression
         {
             var decompressed = DeflateDecompressor.Decompress(Compressed_10MiB);
 
-            Assert.IsTrue(MemoryExtensions.SequenceEqual<byte>(UnCompressed_10MiB, decompressed));
+            CollectionAssert.AreEqual(UnCompressed_10MiB, decompressed);
         }
 
         [TestMethod]
@@ -66,7 +66,7 @@ namespace OpenBlam.Core.Tests.Compression
         {
             var decompressed = DeflateDecompressor.Decompress(Compressed_50MiB);
 
-            Assert.IsTrue(MemoryExtensions.SequenceEqual<byte>(UnCompressed_50MiB, decompressed));
+            CollectionAssert.AreEqual(UnCompressed_50MiB, decompressed);
         }
 
         private byte[] Compress(string data)
@@ -78,12 +78,27 @@ namespace OpenBlam.Core.Tests.Compression
         {
             using var output = new MemoryStream();
             using (var input = new MemoryStream(data))
-            using (var deflate = new DeflateStream(output, CompressionMode.Compress, true))
+            using (var deflate = new DeflateStream(output, CompressionLevel.Optimal, true))
             {
                 input.CopyTo(deflate);
             }
 
             return output.ToArray();
+        }
+
+        private void Fill(byte[] data)
+        {
+            var rand = new Random(42);
+            var current = (byte)rand.Next(0, 255);
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = current;
+
+                if(current == 0 || i % current == 0)
+                {
+                    current = (byte)rand.Next(0, 255);
+                }
+            }
         }
     }
 }
