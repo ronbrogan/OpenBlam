@@ -1,0 +1,93 @@
+﻿using BenchmarkDotNet.Attributes;
+using OpenBlam.Core.Compression;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+
+namespace OpenBlam.Core.Benchmarks
+{
+    [ShortRunJob, MemoryDiagnoser]
+    public class DeflateBenchmarks
+    {
+        private byte[] UnCompressed_1MiB;
+        private byte[] Compressed_1MiB;
+        private byte[] Compressed_10MiB;
+        private byte[] UnCompressed_10MiB;
+        private byte[] Compressed_50MiB;
+        private byte[] UnCompressed_50MiB;
+
+        
+        public DeflateBenchmarks()
+        {
+            var rand = new Random(42);
+
+            UnCompressed_1MiB = new byte[1024 * 1024 * 1];
+            rand.NextBytes(UnCompressed_1MiB);
+            Compressed_1MiB = Compress(UnCompressed_1MiB);
+
+            UnCompressed_10MiB = new byte[1024 * 1024 * 10];
+            rand.NextBytes(UnCompressed_10MiB);
+            Compressed_10MiB = Compress(UnCompressed_10MiB);
+
+            UnCompressed_50MiB = new byte[1024 * 1024 * 50];
+            rand.NextBytes(UnCompressed_50MiB);
+            Compressed_50MiB = Compress(UnCompressed_50MiB);
+        }
+
+        [Benchmark]
+        [ArgumentsSource(nameof(GetData))]
+        public byte[] SIOC_DeflateStream_Decompress(CompressedSize input)
+        {
+            using var decompressed = new MemoryStream();
+
+            using (var data = new MemoryStream(input.Data))
+            using (var deflate = new DeflateStream(data, CompressionMode.Decompress))
+            {
+                deflate.CopyTo(decompressed);
+            }
+
+            return decompressed.ToArray();
+        }
+
+        [Benchmark]
+        [ArgumentsSource(nameof(GetData))]
+        public byte[] DeflateDecompressor_Decompress(CompressedSize input)
+        {
+            return DeflateDecompressor.Decompress(input.Data);
+        }
+
+        public IEnumerable<CompressedSize> GetData()
+        {
+            yield return new CompressedSize(Compressed_1MiB, 1);
+            yield return new CompressedSize(Compressed_10MiB, 10);
+            yield return new CompressedSize(Compressed_50MiB, 50);
+        }
+
+        private byte[] Compress(byte[] data)
+        {
+            using var output = new MemoryStream();
+            using (var input = new MemoryStream(data))
+            using (var deflate = new DeflateStream(output, CompressionMode.Compress, true))
+            {
+                input.CopyTo(deflate);
+            }
+
+            return output.ToArray();
+        }
+
+        public class CompressedSize
+        {
+            public readonly byte[] Data;
+            private readonly int size;
+
+            public CompressedSize(byte[] data, int size)
+            {
+                this.Data = data;
+                this.size = size;
+            }
+
+            public override string ToString() => $"{this.size} MiB";
+        }
+    }
+}
