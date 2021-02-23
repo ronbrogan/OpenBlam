@@ -1,6 +1,7 @@
 ﻿using OpenBlam.Core.Compression.Deflate;
 using System;
-using System.Diagnostics;
+using System.Buffers;
+using System.Collections.Generic;
 using System.IO;
 
 namespace OpenBlam.Core.Compression
@@ -34,13 +35,13 @@ namespace OpenBlam.Core.Compression
 
     public partial class DeflateDecompressor
     {
+        
+
+
         public static byte[] Decompress(byte[] compressed)
         {
-            if (BitConverter.IsLittleEndian == false) throw new NotSupportedException("Big Endian bad?");
+            var output = new MemoryStream();
 
-            using var output = new MemoryStream();
-
-            ulong currentBit = 0;
             DeflateBlock currentBlock;
             Span<byte> buf = stackalloc byte[258];
 
@@ -60,7 +61,8 @@ namespace OpenBlam.Core.Compression
                     var nlength = bits.ReadBitsAsUshort(16); // one's compliment of length
 
                     // copy to output
-                    output.Write(compressed, (int)currentBit, length);
+                    Span<byte> data = compressed;
+                    output.Write(data.Slice((int)(bits.CurrentBit >> 3), length));
                     bits.ConsumeBytes(length);
                 }
                 else
@@ -86,13 +88,11 @@ namespace OpenBlam.Core.Compression
 
                             // move backwards distance bytes in the output stream
                             var head = output.Position;
-
                             output.Position -= distance;
                             var amountRead = output.Read(buf.Slice(0, length));
-
-                            // copy length bytes from this position to the output stream
                             output.Position = head;
 
+                            // Copy length bytes from this position to the output stream
                             // More 'length' can need to be written than available in the output buffer
                             // When this happens, repeatedly write until satisfied
                             var amountWritten = 0;

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "OpenBlam.Core.Benchmarks": {
+      "commandName": "Project",
+      "commandLineArgs": "profile"
+    }
+  }
+}

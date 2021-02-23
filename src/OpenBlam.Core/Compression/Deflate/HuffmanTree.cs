@@ -69,7 +69,7 @@ namespace OpenBlam.Core.Compression.Deflate
 
             var index = value - 257;
 
-            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.LengthExtraBits[index]);
+            var extraBitsVal = data.ReadBitsAsUshort((byte)DeflateConstants.LengthExtraBits[index]);
             return (ushort)(DeflateConstants.LengthBase[index] + extraBitsVal);
         }
 
@@ -98,7 +98,7 @@ namespace OpenBlam.Core.Compression.Deflate
             // do distance extra bits
             Debug.Assert(value < 30, "Value must be in 'distance' range");
 
-            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.DistanceExtraBits[value]);
+            var extraBitsVal = data.ReadBitsAsUshort((byte)DeflateConstants.DistanceExtraBits[value]);
             return (ushort)(DeflateConstants.DistanceBase[value] + extraBitsVal);
         }
 
@@ -323,7 +323,7 @@ namespace OpenBlam.Core.Compression.Deflate
                     valuesProduced++;
                 }
 
-                void ProduceRepeat(byte value, int baseAmount, int bitsAsRepeat)
+                void ProduceRepeat(byte value, int baseAmount, byte bitsAsRepeat)
                 {
                     var repeatCount = data.ReadBitsAsUshort(bitsAsRepeat);
 

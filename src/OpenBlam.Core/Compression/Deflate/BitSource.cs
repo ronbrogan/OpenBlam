@@ -1,4 +1,4 @@
-﻿using System;
+﻿using OpenBlam.Core.Exceptions;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
@@ -7,7 +7,11 @@ namespace OpenBlam.Core.Compression.Deflate
     public class BitSource
     {
         public readonly byte[] Data;
-        private ulong CurrentBit;
+        public ulong CurrentBit => currentBit;
+        private ulong currentBit;
+
+        private int availableLocalBits = 0;
+        private ulong localBits;
 
         public BitSource(byte[] data)
         {
@@ -15,59 +19,100 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetCurrent(ulong bit)
+        private void EnsureBits(int need)
         {
-            this.CurrentBit = bit;
+            if(need > this.availableLocalBits)
+            {
+                // read bits from currentBit
+                var startByte = (int)(currentBit >> 3);
+
+                if (startByte >= Data.Length)
+                    Throw.Exception("Input data not long enough");
+
+                ulong accum = 0;
+                var bitsGathered = 0;
+
+                for(var i = 0; i < 8; i++)
+                {
+                    if (startByte + i >= Data.Length)
+                        break;
+
+                    ulong b = Data[startByte + i];
+                    accum |= (b << (i << 3));
+                    bitsGathered += 8;
+                }
+
+                var bitsAlreadyUsed = (int)(currentBit & 7);
+
+                bitsGathered -= bitsAlreadyUsed;
+                accum >>= bitsAlreadyUsed;
+
+                this.localBits = accum;
+                this.availableLocalBits = bitsGathered;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ConsumeBit(byte count = 1)
+        {
+            currentBit += count;
+            this.availableLocalBits -= count;
+            this.localBits >>= count;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSet()
         {
-            var val = IsSet(CurrentBit);
-            CurrentBit++;
+            EnsureBits(1);
+            var val = BitValue() == 1;
+            ConsumeBit();
             return val;
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool IsSet(ulong bit) => ((Data[bit >> 3] >> (byte)(bit & 7)) & 1) == 1;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte CurrentBitValue()
         {
-            var val = BitValue(CurrentBit);
-            CurrentBit++;
+            EnsureBits(1);
+            var val = BitValue();
+            ConsumeBit();
             return val;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte BitValue(ulong bit) => (byte)((Data[bit >> 3] >> (byte)(bit & 7)) & 1);
+        public ushort ReadBitsAsUshort(byte bits)
+        {
+            if (bits == 0) return 0;
+
+            Debug.Assert(bits <= 16, "Only uint16 is supported here");
+
+            EnsureBits(bits);
+
+            var mask = ulong.MaxValue >> (64 - bits);
+            var value2 = this.localBits & mask;
+
+            ConsumeBit(bits);
+
+            return (ushort)value2;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipToNextByte()
         {
-            CurrentBit >>= 3;
-            CurrentBit++;
-            CurrentBit <<= 3;
+            currentBit >>= 3;
+            currentBit++;
+            currentBit <<= 3;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ConsumeBytes(ulong byteCount)
         {
-            CurrentBit += (byteCount << 3);
+            currentBit += (byteCount << 3);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ushort ReadBitsAsUshort(int bits)
+        public byte BitValue()
         {
-            Debug.Assert(bits <= 16, "Only uint16 is supported here");
-
-            var value = 0;
-            for (var i = 0; i < bits; i++)
-            {
-                value |= (CurrentBitValue() << i);
-            }
-
-            return (ushort)value;
+            return (byte)(this.localBits & 1);
         }
     }
 }

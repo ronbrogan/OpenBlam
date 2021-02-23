@@ -9,15 +9,18 @@ namespace OpenBlam.Core.Benchmarks
     {
         static void Main(string[] args)
         {
-#if DEBUG
-            var b = new DeflateBenchmarks();
+            if (args.Length > 0 && args[0] == "profile")
+            {
+                var b = new DeflateBenchmarks();
 
-            Thread.Sleep(5000);
+                Thread.Sleep(5000);
 
-            b.DeflateDecompressor_Decompress(b.GetData().Last());
-#else
-            BenchmarkRunner.Run<DeflateBenchmarks>();
-#endif
+                b.DeflateDecompressor_Decompress(b.GetData().Last());
+            }
+            else
+            {
+                BenchmarkRunner.Run<DeflateBenchmarks>();
+            }
 
             Console.WriteLine("Done");
             Console.ReadLine();
