@@ -32,8 +32,4 @@
     <ProjectReference Include="..\OpenBlam.Serialization\OpenBlam.Serialization.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Compression\Deflate\" />
-  </ItemGroup>
-
 </Project>

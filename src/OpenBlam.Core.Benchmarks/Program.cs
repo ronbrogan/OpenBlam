@@ -1,5 +1,7 @@
 ﻿using BenchmarkDotNet.Running;
 using System;
+using System.Linq;
+using System.Threading;
 
 namespace OpenBlam.Core.Benchmarks
 {
@@ -7,7 +9,15 @@ namespace OpenBlam.Core.Benchmarks
     {
         static void Main(string[] args)
         {
+#if DEBUG
+            var b = new DeflateBenchmarks();
+
+            Thread.Sleep(5000);
+
+            b.DeflateDecompressor_Decompress(b.GetData().Last());
+#else
             BenchmarkRunner.Run<DeflateBenchmarks>();
+#endif
 
             Console.WriteLine("Done");
             Console.ReadLine();
