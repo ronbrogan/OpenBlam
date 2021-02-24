@@ -58,7 +58,7 @@ namespace OpenBlam.Core.Compression.Deflate
                     return node.Value;
                 }
 
-                var branchIndex = (ushort)(node.Branches >> (data.CurrentBitValue() << 4));
+                var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
                 node = this.literalLengthTree[branchIndex];
             }
         }
@@ -91,7 +91,7 @@ namespace OpenBlam.Core.Compression.Deflate
                     break;
                 }
 
-                var branchIndex = (ushort)(node.Branches >> (data.CurrentBitValue() << 4));
+                var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
                 node = this.distanceTree[branchIndex];
             }
 
@@ -258,7 +258,7 @@ namespace OpenBlam.Core.Compression.Deflate
                             break;
                         }
 
-                        var branchIndex = (ushort)(node.Branches >> (data.CurrentBitValue() << 4));
+                        var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
                         node = tree[branchIndex];
                     }
 

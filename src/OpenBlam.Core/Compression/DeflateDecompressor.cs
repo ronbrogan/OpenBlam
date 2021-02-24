@@ -108,6 +108,8 @@ namespace OpenBlam.Core.Compression
             }
             while (!currentBlock.IsFinal);
 
+            bits.Dispose();
+
             return output.ToArray();
         }
     }
