@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
@@ -53,13 +54,15 @@ namespace OpenBlam.Core.Compression.Deflate
             var node = this.literalLengthTree[0];
             while (true)
             {
-                if (node.Branches == 0)
+                int branch = (ushort)(node.Branches >> data.CurrentBitValueAs16());
+
+                if (branch >= TreeNode.Threshold)
                 {
-                    return node.Value;
+                    // Take lower bits
+                    return (ushort)(branch & 0x7FFF);
                 }
 
-                var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
-                node = this.literalLengthTree[branchIndex];
+                node = this.literalLengthTree[branch];
             }
         }
 
@@ -69,8 +72,15 @@ namespace OpenBlam.Core.Compression.Deflate
 
             var index = value - 257;
 
-            var extraBitsVal = data.ReadBitsAsUshort((byte)DeflateConstants.LengthExtraBits[index]);
-            return (ushort)(DeflateConstants.LengthBase[index] + extraBitsVal);
+            var length = DeflateConstants.LengthBase[index];
+
+            if (index <= 7)
+            {
+                return length;
+            }
+
+            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.LengthExtraBits[index]);
+            return (ushort)(length + extraBitsVal);
         }
 
         public ushort GetDistance(BitSource data)
@@ -82,24 +92,33 @@ namespace OpenBlam.Core.Compression.Deflate
             }
 
             var node = this.distanceTree[0];
-            ushort value;
+            int value;
             while (true)
             {
-                if (node.Branches == 0)
+                int branch = (ushort)(node.Branches >> data.CurrentBitValueAs16());
+
+                if (branch >= TreeNode.Threshold)
                 {
-                    value = node.Value;
+                    // Take lower bits
+                    value = branch & 0x7FFF;
                     break;
                 }
 
-                var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
-                node = this.distanceTree[branchIndex];
+                node = this.distanceTree[branch];
             }
 
             // do distance extra bits
             Debug.Assert(value < 30, "Value must be in 'distance' range");
 
-            var extraBitsVal = data.ReadBitsAsUshort((byte)DeflateConstants.DistanceExtraBits[value]);
-            return (ushort)(DeflateConstants.DistanceBase[value] + extraBitsVal);
+            var distance = DeflateConstants.DistanceBase[value];
+
+            if(value <= 3)
+            {
+                return distance;
+            }
+
+            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.DistanceExtraBits[value]);
+            return (ushort)(distance + extraBitsVal);
         }
 
         // Incoming array maps alphabet value (index) to the code length required to walk to the value
@@ -121,28 +140,32 @@ namespace OpenBlam.Core.Compression.Deflate
                 if (len == 0)
                     continue;
 
+                // rhs is not significant here
+                ref var index = ref tree[currentNode].Left;
+                
                 for (int i = 0; i < len; i++)
                 {
                     var isSet = ((codeword >> (len - i - 1)) & 1) == 1;
-
-                    ref var index = ref tree[currentNode].Left;
-
+                
+                    index = ref tree[currentNode].Left;
+                
                     if (isSet)
                     {
                         index = ref tree[currentNode].Right;
                     }
-
+                
                     if (index == 0)
                     {
                         index = nodeCount;
                         nodeCount++;
                     }
-
+                
                     currentNode = index;
                 }
-
+                
                 // Use current node to store value
-                tree[currentNode].Value = c;
+                nodeCount--;
+                index = (ushort)(TreeNode.Threshold | c);
 
                 // restart at root
                 currentNode = 0;
@@ -250,16 +273,18 @@ namespace OpenBlam.Core.Compression.Deflate
                     var node = tree[0];
                     byte codeLength = 0;
 
-                    while (true)
+                    while(true)
                     {
-                        if (node.Branches == 0)
+                        var branch = (ushort)(node.Branches >> data.CurrentBitValueAs16());
+
+                        if(branch >= TreeNode.Threshold)
                         {
-                            codeLength = (byte)node.Value;
+                            // Take lower bits
+                            codeLength = (byte)branch;
                             break;
                         }
 
-                        var branchIndex = (ushort)(node.Branches >> data.CurrentBitValueAs16());
-                        node = tree[branchIndex];
+                        node = tree[branch];
                     }
 
                     //0 - 15: Represent code lengths of 0 - 15
@@ -339,6 +364,8 @@ namespace OpenBlam.Core.Compression.Deflate
         [StructLayout(LayoutKind.Explicit)]
         private struct TreeNode
         {
+            public const ushort Threshold = 1 << 15;
+
             [FieldOffset(0)]
             public uint Branches;
 
@@ -347,9 +374,6 @@ namespace OpenBlam.Core.Compression.Deflate
 
             [FieldOffset(2)]
             public ushort Right;
-
-            [FieldOffset(4)]
-            public ushort Value;
         }
     }
 }

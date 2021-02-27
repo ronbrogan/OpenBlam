@@ -72,9 +72,18 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ConsumeBit(byte count = 1)
+        private void ConsumeBit()
         {
-            currentBit += count;
+            this.currentBit ++;
+            this.availableLocalBits--;
+            this.currentLocalBit++;
+            this.localBits >>= 1;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ConsumeBit(byte count)
+        {
+            this.currentBit += count;
             this.availableLocalBits -= count;
             this.currentLocalBit += count;
             this.localBits >>= count;
@@ -103,7 +112,6 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             EnsureBits(1);
             var val = *(((byte*)this.localBitsAsBytesPtr) + this.currentLocalBit);
-            //var val = (this.localBits & 1) << 4;
             ConsumeBit();
             return (byte)val;
         }
