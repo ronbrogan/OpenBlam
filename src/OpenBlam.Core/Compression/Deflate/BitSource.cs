@@ -1,6 +1,7 @@
 ﻿using OpenBlam.Core.Exceptions;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,9 +10,10 @@ using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    public sealed class BitSource : IDisposable
+    public sealed class BitSource : IDisposable, IBitSource
     {
         public readonly byte[] Data;
+
         public ulong CurrentBit => currentBit;
         private ulong currentBit;
 
@@ -37,7 +39,7 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe void EnsureBits(int need)
         {
-            if(need > this.availableLocalBits)
+            if (need > this.availableLocalBits)
             {
                 // read bits from currentBit
                 var startByte = (int)(currentBit >> 3);
@@ -49,7 +51,7 @@ namespace OpenBlam.Core.Compression.Deflate
                 ulong accum = 0;
                 var bytesToRead = Math.Min(8, Data.Length - startByte);
 
-                if(bytesToRead == 8)
+                if (bytesToRead == 8)
                 {
                     accum = BitConverter.ToUInt64(Data, startByte);
                 }
@@ -74,7 +76,7 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ConsumeBit()
         {
-            this.currentBit ++;
+            this.currentBit++;
             this.availableLocalBits--;
             this.currentLocalBit++;
             this.localBits >>= 1;
@@ -185,7 +187,7 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe void BroadcastTo16s(ulong value)
         {
-            if(Avx2.IsSupported)
+            if (Avx2.IsSupported)
             {
                 var zero = Vector256.Create((byte)0);
 
@@ -208,13 +210,13 @@ namespace OpenBlam.Core.Compression.Deflate
                 z2 = Avx2.Shuffle(Sixteens, z2);
 
                 byte* l = (byte*)localBitsAsBytesPtr;
-                
+
                 Avx2.Store(l, z);
-                Avx2.Store(l+32, z2);
+                Avx2.Store(l + 32, z2);
             }
             else
             {
-                for(var i = 0; i < 64; i++)
+                for (var i = 0; i < 64; i++)
                 {
                     this.localBitsAsBytes[i] = (byte)(((value >> i) & 1) * 16);
                 }

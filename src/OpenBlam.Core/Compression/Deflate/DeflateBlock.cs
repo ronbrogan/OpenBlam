@@ -11,11 +11,11 @@
     internal struct DeflateBlock
     {
         public HuffmanTree HuffmanTree;
-        public BitSource Compressed;
+        public IBitSource Compressed;
         public bool IsFinal;
         public BlockType Type;
 
-        public DeflateBlock(BitSource data)
+        public DeflateBlock(IBitSource data)
         {
             Compressed = data;
 

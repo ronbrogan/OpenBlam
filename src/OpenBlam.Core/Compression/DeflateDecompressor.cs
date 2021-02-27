@@ -96,5 +96,61 @@ namespace OpenBlam.Core.Compression
                 return output.ToArray();
             }
         }
+
+        public unsafe static void Decompress(Stream compressed, Stream decompressed)
+        {
+            var output = new DeflateStreamOutputBuffer(decompressed);
+            var bits = new StreamBitSource(compressed);
+
+            {
+                DeflateBlock currentBlock;
+
+                do
+                {
+                    currentBlock = new DeflateBlock(bits);
+
+                    if (currentBlock.Type == BlockType.NoCompression)
+                    {
+                        // skip to next byte
+                        bits.SkipToNextByte();
+
+                        // Read length and nlength?
+                        var length = bits.ReadBitsAsUshort(16);
+                        bits.ConsumeBit(16);
+                        //var nlength = bits.ReadBitsAsUshort(16); // one's compliment of length
+
+                        // copy to output
+                        output.Write(compressed, length);
+                        bits.ConsumeBytes(length);
+                    }
+                    else
+                    {
+                        while (true)
+                        {
+                            // decode literal/length value from input stream
+                            var value = currentBlock.GetNextValue();
+
+                            if (value == DeflateConstants.EndOfBlock) // end of block
+                            {
+                                break;
+                            }
+
+                            if (value < DeflateConstants.EndOfBlock)
+                            {
+                                //copy value(literal byte) to output stream
+                                output.WriteByte((byte)value);
+                            }
+                            else // value = 257..285
+                            {
+                                var (length, distance) = currentBlock.GetLengthAndDistance(value);
+
+                                output.WriteWindow(length, distance);
+                            }
+                        }
+                    }
+                }
+                while (!currentBlock.IsFinal);
+            }
+        }
     }
 }

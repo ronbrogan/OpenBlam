@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal unsafe sealed class DeflateOutputBuffer : IDisposable
+    internal unsafe sealed class DeflateOutputBuffer : IDisposable, IDeflateOutputBuffer
     {
         // CHUNK_SIZE should never be under 65535, this way we can 
         // guarantee only one possible chunk gap when reading/writing
@@ -36,7 +36,7 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             Debug.Assert(dataLength <= 65535);
 
-            while(dataLength > 0)
+            while (dataLength > 0)
             {
                 var chunkFree = CHUNK_SIZE - currentPosition;
                 var toWrite = Math.Min(chunkFree, dataLength);
@@ -62,22 +62,20 @@ namespace OpenBlam.Core.Compression.Deflate
 
             int startChunkIndex;
             int startChunkPos;
-            int endChunkIndex;
 
             startChunkIndex = Math.DivRem(windowStart, CHUNK_SIZE, out startChunkPos);
-            endChunkIndex = (windowStart + windowLength) / CHUNK_SIZE;
 
             byte* startPtr = (byte*)this.memoryPtrList[startChunkIndex] + startChunkPos;
             byte* endPtr = (byte*)0;
 
             var splitChunkReadAt = -1;
-            if(startChunkIndex != endChunkIndex)
+            if (startChunkPos + windowLength > CHUNK_SIZE)
             {
                 splitChunkReadAt = CHUNK_SIZE - startChunkPos;
-                endPtr = (byte*)this.memoryPtrList[endChunkIndex];
+                endPtr = (byte*)this.memoryPtrList[startChunkIndex + 1];
             }
 
-            while(lengthToWrite > 0)
+            while (lengthToWrite > 0)
             {
                 var toWrite = Math.Min(windowLength, lengthToWrite);
 
@@ -148,14 +146,14 @@ namespace OpenBlam.Core.Compression.Deflate
 
         private void ReleaseResources()
         {
-            lock(this.memoryHandleList)
-            foreach (var handle in this.memoryHandleList)
-            {
-                var buf = (byte[])handle.Target;
-                handle.Free();
-                outputBufferPool.Return(buf);
-                this.memoryHandleList.Remove(handle);
-            }
+            lock (this.memoryHandleList)
+                foreach (var handle in this.memoryHandleList)
+                {
+                    var buf = (byte[])handle.Target;
+                    handle.Free();
+                    outputBufferPool.Return(buf);
+                    this.memoryHandleList.Remove(handle);
+                }
         }
     }
 }

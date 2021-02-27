@@ -75,6 +75,17 @@ namespace OpenBlam.Core.Benchmarks
             return DeflateDecompressor.Decompress(input.Data);
         }
 
+        [Benchmark]
+        [ArgumentsSource(nameof(GetData))]
+        public byte[] DeflateDecompressor_DecompressStream(CompressedSize input)
+        {
+            using var decompressed = new MemoryStream();
+            using var data = new MemoryStream(input.Data);
+            DeflateDecompressor.Decompress(data, decompressed);
+
+            return decompressed.ToArray();
+        }
+
         public IEnumerable<CompressedSize> GetData()
         {
             yield return new CompressedSize(Compressed_1MiB, 1);

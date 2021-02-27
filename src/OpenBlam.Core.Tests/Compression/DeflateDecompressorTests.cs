@@ -69,6 +69,57 @@ namespace OpenBlam.Core.Tests.Compression
             CollectionAssert.AreEqual(UnCompressed_50MiB, decompressed);
         }
 
+        [TestMethod]
+        public void StreamDecompress_String()
+        {
+            var data = "thisissomestringdatathatwillbeusedtotestthedecompressionofthealgorithm";
+            var compressed = Compress(data);
+
+            using var outStream = new MemoryStream();
+            using var inStream = new MemoryStream(compressed);
+            DeflateDecompressor.Decompress(inStream, outStream);
+
+            var decompressed = outStream.ToArray();
+
+            Assert.AreEqual(data, Encoding.UTF8.GetString(decompressed));
+        }
+
+        [TestMethod]
+        public void StreamDecompress_Random1MiB()
+        {
+            using var outStream = new MemoryStream();
+            using var inStream = new MemoryStream(Compressed_1MiB);
+            DeflateDecompressor.Decompress(inStream, outStream);
+
+            var decompressed = outStream.ToArray();
+
+            CollectionAssert.AreEqual(UnCompressed_1MiB, decompressed);
+        }
+
+        [TestMethod]
+        public void StreamDecompress_Random10MiB()
+        {
+            using var outStream = new MemoryStream();
+            using var inStream = new MemoryStream(Compressed_10MiB);
+            DeflateDecompressor.Decompress(inStream, outStream);
+
+            var decompressed = outStream.ToArray();
+
+            CollectionAssert.AreEqual(UnCompressed_10MiB, decompressed);
+        }
+
+        [TestMethod]
+        public void StreamDecompress_Random50MiB()
+        {
+            using var outStream = new MemoryStream();
+            using var inStream = new MemoryStream(Compressed_50MiB);
+            DeflateDecompressor.Decompress(inStream, outStream);
+
+            var decompressed = outStream.ToArray();
+
+            CollectionAssert.AreEqual(UnCompressed_50MiB, decompressed);
+        }
+
         private byte[] Compress(string data)
         {
             return Compress(Encoding.UTF8.GetBytes(data));
