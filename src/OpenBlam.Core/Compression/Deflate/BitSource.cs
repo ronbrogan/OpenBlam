@@ -9,7 +9,7 @@ using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    public class BitSource
+    public sealed class BitSource : IDisposable
     {
         public readonly byte[] Data;
         public ulong CurrentBit => currentBit;
@@ -81,7 +81,7 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ConsumeBit(byte count)
+        public void ConsumeBit(byte count)
         {
             this.currentBit += count;
             this.availableLocalBits -= count;
@@ -144,7 +144,12 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ConsumeBytes(ulong byteCount)
         {
-            currentBit += (byteCount << 3);
+            var bits = (int)(byteCount << 3);
+
+            currentBit += (uint)bits;
+            this.availableLocalBits -= bits;
+            this.currentLocalBit += bits;
+            this.localBits >>= bits;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

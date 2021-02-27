@@ -1,4 +1,6 @@
 ﻿using BenchmarkDotNet.Attributes;
+using ICSharpCode.SharpZipLib.Zip.Compression;
+using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
 using OpenBlam.Core.Compression;
 using System;
 using System.Collections.Generic;
@@ -45,6 +47,22 @@ namespace OpenBlam.Core.Benchmarks
             using (var deflate = new DeflateStream(data, CompressionMode.Decompress))
             {
                 deflate.CopyTo(decompressed);
+            }
+
+            return decompressed.ToArray();
+        }
+
+        [Benchmark]
+        [ArgumentsSource(nameof(GetData))]
+        public byte[] SharpZipLib_Decompress(CompressedSize input)
+        {
+            var inf = new Inflater(true);
+            using var decompressed = new MemoryStream();
+
+            using (var data = new MemoryStream(input.Data))
+            using (var decompressor = new InflaterInputStream(data, inf))
+            {
+                decompressor.CopyTo(decompressed);
             }
 
             return decompressed.ToArray();

@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal unsafe class DeflateOutputBuffer
+    internal unsafe sealed class DeflateOutputBuffer : IDisposable
     {
         // CHUNK_SIZE should never be under 65535, this way we can 
         // guarantee only one possible chunk gap when reading/writing
@@ -39,7 +39,7 @@ namespace OpenBlam.Core.Compression.Deflate
             while(dataLength > 0)
             {
                 var chunkFree = CHUNK_SIZE - currentPosition;
-                var toWrite = FastMin(chunkFree, dataLength);
+                var toWrite = Math.Min(chunkFree, dataLength);
                 Buffer.MemoryCopy(data, this.currentChunk + currentPosition, chunkFree, toWrite);
                 this.Advance(toWrite);
                 dataLength -= toWrite;
@@ -58,7 +58,7 @@ namespace OpenBlam.Core.Compression.Deflate
         public void WriteWindow(int lengthToWrite, int lookbackDistance)
         {
             var windowStart = this.AbsolutePosition - lookbackDistance;
-            var windowLength = FastMin(lookbackDistance, lengthToWrite);
+            var windowLength = Math.Min(lookbackDistance, lengthToWrite);
 
             int startChunkIndex;
             int startChunkPos;
@@ -136,29 +136,26 @@ namespace OpenBlam.Core.Compression.Deflate
 
                 var remaining = this.AbsolutePosition - written;
                 Buffer.MemoryCopy((byte*)this.memoryPtrList[memoryHandleList.Count - 1], outp + written, output.Length - written, remaining);
-
-                ReleaseResources();
             }
 
             return output;
         }
 
+        public void Dispose()
+        {
+            ReleaseResources();
+        }
+
         private void ReleaseResources()
         {
+            lock(this.memoryHandleList)
             foreach (var handle in this.memoryHandleList)
             {
                 var buf = (byte[])handle.Target;
                 handle.Free();
                 outputBufferPool.Return(buf);
+                this.memoryHandleList.Remove(handle);
             }
-        }
-
-        private static int FastMin(int a, int b)
-        {
-            // signed for arithmetic shift
-            int mask = b - a;
-            // mask < 0 means MSB is 1.
-            return a + (mask & (mask >> 31));
         }
     }
 }

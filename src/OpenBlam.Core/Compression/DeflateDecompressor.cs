@@ -41,15 +41,12 @@ namespace OpenBlam.Core.Compression
     {
         public unsafe static byte[] Decompress(byte[] compressed)
         {
-            var output = new DeflateOutputBuffer();
-
-            DeflateBlock currentBlock;
-            byte* buf = stackalloc byte[258];
-
-            var bits = new BitSource(compressed);
-
-            fixed(byte* data = compressed)
+            using (var output = new DeflateOutputBuffer())
+            using (var bits = new BitSource(compressed))
+            fixed (byte* data = compressed)
             {
+                DeflateBlock currentBlock;
+
                 do
                 {
                     currentBlock = new DeflateBlock(bits);
@@ -61,7 +58,8 @@ namespace OpenBlam.Core.Compression
 
                         // Read length and nlength?
                         var length = bits.ReadBitsAsUshort(16);
-                        var nlength = bits.ReadBitsAsUshort(16); // one's compliment of length
+                        bits.ConsumeBit(16);
+                        //var nlength = bits.ReadBitsAsUshort(16); // one's compliment of length
 
                         // copy to output
                         output.Write(data + (int)(bits.CurrentBit >> 3), length);
@@ -79,11 +77,6 @@ namespace OpenBlam.Core.Compression
                                 break;
                             }
 
-                            if(output.AbsolutePosition > 8650000 && output.AbsolutePosition < 8651000)
-                            {
-                                Debugger.Break();
-                            }    
-
                             if (value < DeflateConstants.EndOfBlock)
                             {
                                 //copy value(literal byte) to output stream
@@ -99,13 +92,9 @@ namespace OpenBlam.Core.Compression
                     }
                 }
                 while (!currentBlock.IsFinal);
+
+                return output.ToArray();
             }
-
-            
-
-            bits.Dispose();
-
-            return output.ToArray();
         }
     }
 }
