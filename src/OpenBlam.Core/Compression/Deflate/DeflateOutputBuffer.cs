@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
@@ -17,26 +18,18 @@ namespace OpenBlam.Core.Compression.Deflate
         private int absolutePosition;
         private int currentChunkIndex;
         private int currentPosition;
+        private byte* currentChunk;
 
-        public int AbsolutePosition
-        {
-            get
-            {
-                return absolutePosition;
-            }
-            private set
-            {
-                absolutePosition = value;
-                currentChunkIndex = Math.DivRem(value, chunkSize, out currentPosition);
-            }
-        }
+        public int AbsolutePosition => absolutePosition;
 
         public DeflateOutputBuffer()
         {
             AllocateChunk();
+            this.currentChunk = (byte*)this.memoryPtrList[this.currentChunkIndex];
         }
 
-        public unsafe void Write(byte* data, int dataLength)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Write(byte* data, int dataLength)
         {
             if (dataLength == 0) return;
 
@@ -47,25 +40,23 @@ namespace OpenBlam.Core.Compression.Deflate
 
                 var toWrite = Math.Min(chunkFree, dataLength - written);
 
-                Buffer.MemoryCopy(data + written, (byte*)this.memoryPtrList[currentChunkIndex] + currentPosition, chunkFree, toWrite);
+                Buffer.MemoryCopy(data + written, this.currentChunk + currentPosition, chunkFree, toWrite);
                 written += toWrite;
 
-                this.AbsolutePosition += toWrite;
-
-                EnsureCapacity();
+                this.Advance(toWrite);
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteByte(byte value)
         {
-            ((byte[])this.memoryHandleList[currentChunkIndex].Target)[currentPosition] = value;
+            var curr = this.currentChunk + currentPosition;
+            *curr = value;
 
-            this.AbsolutePosition++;
-
-            EnsureCapacity();
+            this.Advance(1);
         }
 
-        public unsafe void WriteWindow(int lengthToWrite, int lookbackDistance)
+        public void WriteWindow(int lengthToWrite, int lookbackDistance)
         {
             var windowStart = this.AbsolutePosition - lookbackDistance;
             var windowLength = Math.Min(lookbackDistance, lengthToWrite);
@@ -96,22 +87,29 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         /// <summary>
-        /// Writing will always stop at a chunk boundary and re-call EnsureCapacity
-        /// This method just needs to check if the current chunk is allocated, and allocate if needed
+        /// Writing must always stop at a chunk boundary and Advance the position
+        /// This method will allocate the next chunk and set appropriate values
         /// </summary>
         /// <param name="length"></param>
-        private void EnsureCapacity()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Advance(int delta)
         {
-            var chunkIndex = this.AbsolutePosition / chunkSize;
+            this.absolutePosition += delta;
 
-            if (this.memoryHandleList.Count > chunkIndex)
+            this.currentPosition += delta;
+
+            var chunkOverflow = this.currentPosition - chunkSize;
+
+            if (chunkOverflow >= 0)
             {
-                return;
+                AllocateChunk();
+                this.currentChunkIndex++;
+                this.currentChunk = (byte*)this.memoryPtrList[this.currentChunkIndex];
+                this.currentPosition = chunkOverflow;
             }
-
-            AllocateChunk();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AllocateChunk()
         {
             var newBuf = outputBufferPool.Rent(chunkSize);
