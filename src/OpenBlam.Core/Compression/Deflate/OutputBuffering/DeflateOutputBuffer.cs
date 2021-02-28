@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal unsafe sealed class DeflateOutputBuffer : IDisposable, IDeflateOutputBuffer
+    internal unsafe sealed class DeflateOutputBuffer : DeflateOutput<IntPtr>, IDisposable
     {
         // CHUNK_SIZE should never be under 65535, this way we can 
         // guarantee only one possible chunk gap when reading/writing
@@ -23,8 +23,6 @@ namespace OpenBlam.Core.Compression.Deflate
         private int currentPosition;
         private byte* currentChunk;
 
-        public int AbsolutePosition => absolutePosition;
-
         public DeflateOutputBuffer()
         {
             AllocateChunk();
@@ -32,7 +30,13 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Write(byte* data, int dataLength)
+        public override void Write(IntPtr data, int dataLength)
+        {
+            Write((byte*)data, dataLength);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Write(byte* data, int dataLength)
         {
             Debug.Assert(dataLength <= 65535);
 
@@ -40,7 +44,7 @@ namespace OpenBlam.Core.Compression.Deflate
             {
                 var chunkFree = CHUNK_SIZE - currentPosition;
                 var toWrite = Math.Min(chunkFree, dataLength);
-                Buffer.MemoryCopy(data, this.currentChunk + currentPosition, chunkFree, toWrite);
+                Buffer.MemoryCopy((byte*)data, this.currentChunk + currentPosition, chunkFree, toWrite);
                 this.Advance(toWrite);
                 dataLength -= toWrite;
                 data += toWrite;
@@ -48,45 +52,42 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteByte(byte value)
+        public override void WriteByte(byte value)
         {
             *(this.currentChunk + currentPosition) = value;
             this.Advance(1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void WriteWindow(int lengthToWrite, int lookbackDistance)
+        public override void WriteWindow(int lengthToWrite, int lookbackDistance)
         {
-            var windowStart = this.AbsolutePosition - lookbackDistance;
+            var windowStart = this.absolutePosition - lookbackDistance;
             var windowLength = Math.Min(lookbackDistance, lengthToWrite);
 
-            int startChunkIndex;
-            int startChunkPos;
-
-            startChunkIndex = Math.DivRem(windowStart, CHUNK_SIZE, out startChunkPos);
+            var startChunkIndex = Math.DivRem(windowStart, CHUNK_SIZE, out var startChunkPos);
 
             byte* startPtr = (byte*)this.memoryPtrList[startChunkIndex] + startChunkPos;
             byte* endPtr = (byte*)0;
 
-            var splitChunkReadAt = -1;
-            if (startChunkPos + windowLength > CHUNK_SIZE)
+            var nextChunkWrite = (startChunkPos + windowLength) - CHUNK_SIZE;
+            if (nextChunkWrite <= 0)
             {
-                splitChunkReadAt = CHUNK_SIZE - startChunkPos;
-                endPtr = (byte*)this.memoryPtrList[startChunkIndex + 1];
+                nextChunkWrite = 0;
+            }
+            else
+            {
+                endPtr = (byte*)this.memoryPtrList[startChunkIndex + 1]; 
             }
 
-            while (lengthToWrite > 0)
+            do
             {
                 var toWrite = Math.Min(windowLength, lengthToWrite);
 
-                var chunkToWrite = (int)Math.Min(toWrite, (uint)splitChunkReadAt);
-                Write(startPtr, chunkToWrite);
-
-                var remainingToWrite = toWrite - chunkToWrite;
-                Write(endPtr, remainingToWrite);
+                Write(startPtr, toWrite - nextChunkWrite);
+                Write(endPtr, nextChunkWrite);
 
                 lengthToWrite -= toWrite;
-            }
+            } while (lengthToWrite > 0);
         }
 
         /// <summary>
@@ -98,15 +99,18 @@ namespace OpenBlam.Core.Compression.Deflate
         private void Advance(int delta)
         {
             this.absolutePosition += delta;
-            this.currentPosition += delta;
 
-            var chunkOverflow = this.currentPosition - CHUNK_SIZE;
-            if (chunkOverflow >= 0)
+            var newPos = this.currentPosition + delta;
+            var chunkOverflow = newPos - CHUNK_SIZE;
+            if (chunkOverflow < 0)
             {
-                this.currentPosition = chunkOverflow;
-                this.currentChunkIndex++;
-                this.currentChunk = AllocateChunk();
+                this.currentPosition = newPos;
+                return;
             }
+
+            this.currentPosition = chunkOverflow;
+            this.currentChunkIndex++;
+            this.currentChunk = AllocateChunk();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -122,7 +126,7 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public byte[] ToArray()
         {
-            var output = new byte[AbsolutePosition];
+            var output = new byte[absolutePosition];
             fixed (byte* outp = output)
             {
                 var written = 0;
@@ -132,7 +136,7 @@ namespace OpenBlam.Core.Compression.Deflate
                     written += CHUNK_SIZE;
                 }
 
-                var remaining = this.AbsolutePosition - written;
+                var remaining = this.absolutePosition - written;
                 Buffer.MemoryCopy((byte*)this.memoryPtrList[memoryHandleList.Count - 1], outp + written, output.Length - written, remaining);
             }
 

@@ -1,8 +1,5 @@
-﻿using OpenBlam.Core.Exceptions;
-using System;
+﻿using System;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -10,67 +7,22 @@ using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    public sealed class BitSource : IDisposable, IBitSource
+    public unsafe abstract class BitSource : IDisposable
     {
-        public readonly byte[] Data;
-
         public ulong CurrentBit => currentBit;
-        private ulong currentBit;
+        protected ulong currentBit;
 
-        private int availableLocalBits = 0;
-        private int currentLocalBit = 0;
-        private ulong localBits;
-        private byte[] localBitsAsBytes = new byte[64];
-        private IntPtr localBitsAsBytesPtr = IntPtr.Zero;
-        private GCHandle localBitsAsBytesHandle;
+        protected int availableLocalBits = 0;
+        protected int currentLocalBit = 0;
+        protected ulong localBits;
+        protected byte[] localBitsAsBytes = new byte[64];
+        protected byte* localBitsAsBytesPtr;
+        protected GCHandle localBitsAsBytesHandle;
 
-        public BitSource(byte[] data)
+        public BitSource()
         {
-            this.Data = data;
             localBitsAsBytesHandle = GCHandle.Alloc(localBitsAsBytes, GCHandleType.Pinned);
-            localBitsAsBytesPtr = localBitsAsBytesHandle.AddrOfPinnedObject();
-        }
-
-        public void Dispose()
-        {
-            this.localBitsAsBytesHandle.Free();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void EnsureBits(int need)
-        {
-            if (need > this.availableLocalBits)
-            {
-                // read bits from currentBit
-                var startByte = (int)(currentBit >> 3);
-                this.currentLocalBit = (int)(currentBit & 7);
-
-                if (startByte >= Data.Length)
-                    Throw.Exception("Input data not long enough");
-
-                ulong accum = 0;
-                var bytesToRead = Math.Min(8, Data.Length - startByte);
-
-                if (bytesToRead == 8)
-                {
-                    accum = BitConverter.ToUInt64(Data, startByte);
-                }
-                else
-                {
-                    for (var i = 0; i < bytesToRead; i++)
-                    {
-                        ulong b = Data[startByte + i];
-                        accum |= (b << (i << 3));
-                    }
-                }
-
-                BroadcastTo16s(accum);
-
-                accum >>= this.currentLocalBit;
-
-                this.localBits = accum;
-                this.availableLocalBits = (bytesToRead * 8) - this.currentLocalBit;
-            }
+            localBitsAsBytesPtr = (byte*)localBitsAsBytesHandle.AddrOfPinnedObject();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -113,7 +65,8 @@ namespace OpenBlam.Core.Compression.Deflate
         public unsafe byte CurrentBitValueAs16()
         {
             EnsureBits(1);
-            var val = *(((byte*)this.localBitsAsBytesPtr) + this.currentLocalBit);
+            var val = *(this.localBitsAsBytesPtr + this.currentLocalBit);
+            //var val = (this.localBits & 1) << 4;
             ConsumeBit();
             return (byte)val;
         }
@@ -160,6 +113,8 @@ namespace OpenBlam.Core.Compression.Deflate
             return (byte)(this.localBits & 1);
         }
 
+        protected abstract void EnsureBits(int need);
+
         Vector256<byte> ByteExpansionMask = Vector256.Create(
                 (byte)0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00,
@@ -183,9 +138,10 @@ namespace OpenBlam.Core.Compression.Deflate
         );
 
         Vector256<byte> Sixteens = Vector256.Create((byte)16);
+        private bool disposedValue;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void BroadcastTo16s(ulong value)
+        protected unsafe void BroadcastTo16s(ulong value)
         {
             if (Avx2.IsSupported)
             {
@@ -209,10 +165,8 @@ namespace OpenBlam.Core.Compression.Deflate
                 z = Avx2.Shuffle(Sixteens, z);
                 z2 = Avx2.Shuffle(Sixteens, z2);
 
-                byte* l = (byte*)localBitsAsBytesPtr;
-
-                Avx2.Store(l, z);
-                Avx2.Store(l + 32, z2);
+                Avx2.Store(localBitsAsBytesPtr, z);
+                Avx2.Store(localBitsAsBytesPtr + 32, z2);
             }
             else
             {
@@ -221,6 +175,26 @@ namespace OpenBlam.Core.Compression.Deflate
                     this.localBitsAsBytes[i] = (byte)(((value >> i) & 1) * 16);
                 }
             }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    this.localBitsAsBytesHandle.Free();
+                }
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }

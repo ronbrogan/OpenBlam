@@ -17,7 +17,7 @@ namespace OpenBlam.Core.Compression.Deflate
         private TreeNode[] literalLengthTree;
         private TreeNode[] distanceTree;
 
-        public HuffmanTree(IBitSource data)
+        public HuffmanTree(BitSource data)
         {
             // Read 5 bits for LiteralLengthCodeCount
             LiteralLengthCodeCount = (ushort)(data.ReadBitsAsUshort(5) + 257);
@@ -49,7 +49,7 @@ namespace OpenBlam.Core.Compression.Deflate
             this.distanceTree = GenerateTreeNodes(distanceLengths);
         }
 
-        public ushort GetValue(IBitSource data)
+        public ushort GetValue(BitSource data)
         {
             var node = this.literalLengthTree[0];
             while (true)
@@ -66,7 +66,7 @@ namespace OpenBlam.Core.Compression.Deflate
             }
         }
 
-        public ushort GetLength(IBitSource data, ushort value)
+        public ushort GetLength(BitSource data, ushort value)
         {
             Debug.Assert(value > 256, "Value must be in the 'length' range");
 
@@ -83,7 +83,7 @@ namespace OpenBlam.Core.Compression.Deflate
             return (ushort)(length + extraBitsVal);
         }
 
-        public ushort GetDistance(IBitSource data)
+        public ushort GetDistance(BitSource data)
         {
             if (this.distanceTree == null)
             {
@@ -258,7 +258,7 @@ namespace OpenBlam.Core.Compression.Deflate
             }
 
             internal (byte[] literalLengths, byte[] distanceLengths) ProduceLengths(
-                IBitSource data,
+                BitSource data,
                 ushort literalLengthCodeCount,
                 byte distanceCodeCount)
             {

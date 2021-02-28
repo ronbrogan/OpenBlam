@@ -13,9 +13,13 @@ namespace OpenBlam.Core.Benchmarks
             {
                 var b = new DeflateBenchmarks();
 
-                Thread.Sleep(5000);
+                Thread.Sleep(2000);
 
                 b.DeflateDecompressor_Decompress(b.GetData().Last());
+
+                Thread.Sleep(2000);
+
+                b.DeflateDecompressor_DecompressStream(b.GetData().Last());
             }
             else
             {
