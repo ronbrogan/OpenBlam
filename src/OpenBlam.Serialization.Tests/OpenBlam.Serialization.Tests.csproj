@@ -6,6 +6,7 @@
     <GenerateSerializersInto>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)\GeneratedSerializers</GenerateSerializersInto>
     <LangVersion>preview</LangVersion>
     <IsPackable>false</IsPackable>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <!-- Enable debugging props since we're using project reference -->

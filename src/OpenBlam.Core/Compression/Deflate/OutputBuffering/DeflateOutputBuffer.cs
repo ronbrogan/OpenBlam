@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
@@ -15,13 +16,14 @@ namespace OpenBlam.Core.Compression.Deflate
 
         private static ArrayPool<byte> outputBufferPool = ArrayPool<byte>.Shared;
 
-        private List<GCHandle> memoryHandleList = new();
-        private List<IntPtr> memoryPtrList = new();
+        private List<(GCHandle handle, long length)> memoryHandleList = new();
 
         private int absolutePosition = 0;
-        private int currentPosition = 0;
-        private int currentChunkFree = CHUNK_SIZE;
+        private int currentChunkIndex = 0;
+        private long currentPosition = 0;
         private byte* currentChunk;
+        private byte* previousChunk;
+        private long previousLength;
 
         public DeflateOutputBuffer()
         {
@@ -36,46 +38,54 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Write(byte* data, int dataLength)
+        private void Write(byte* data, long dataLength)
         {
             Debug.Assert(dataLength <= 65535);
 
-            while (dataLength != 0)
+            if (dataLength == 0) return;
+
+            if (currentPosition + dataLength >= CHUNK_SIZE)
             {
-                var toWrite = Math.Min(this.currentChunkFree, dataLength);
-                dataLength -= toWrite;
-                Buffer.MemoryCopy(data, this.currentChunk + currentPosition, this.currentChunkFree, toWrite);
-                data += toWrite;
-                this.Advance(toWrite);
+                this.previousChunk = this.currentChunk;
+                this.previousLength = this.currentPosition;
+                this.memoryHandleList[this.currentChunkIndex] = (this.memoryHandleList[this.currentChunkIndex].handle, this.currentPosition);
+
+                this.currentChunk = AllocateChunk();
+                this.currentPosition = 0;
+                this.currentChunkIndex++;
             }
+
+            Buffer.MemoryCopy(data, this.currentChunk + this.currentPosition, dataLength, dataLength);
+            this.currentPosition += dataLength;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void WriteByte(byte value)
         {
-            *(this.currentChunk + currentPosition) = value;
-            this.Advance(1);
+            *this.GetWriteLocation(1) = value;
+            this.currentPosition++;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public override void WriteWindow(int lengthToWrite, int lookbackDistance)
         {
-            var windowStart = this.absolutePosition - lookbackDistance;
+            var windowStart = this.currentPosition - lookbackDistance;
             var windowLength = Math.Min(lookbackDistance, lengthToWrite);
-            var startChunkIndex = Math.DivRem(windowStart, CHUNK_SIZE, out var startChunkPos);
-            var endChunkPos = startChunkPos + windowLength;
 
-            byte* startPtr = (byte*)this.memoryPtrList[startChunkIndex] + startChunkPos;
-            byte* endPtr = (byte*)0;
+            long nextChunkWrite = 0;
 
-            int nextChunkWrite = endChunkPos - CHUNK_SIZE;
-            if (nextChunkWrite >= 0)
+            // By default assume that the lookback can be sourced from within current chunk
+            byte* startPtr = this.currentChunk + windowStart;
+            byte* endPtr = this.currentChunk;
+
+            // Detect if we need to split reads to prior chunk
+            if (windowStart < 0)
             {
-                endPtr = (byte*)this.memoryPtrList[startChunkIndex + 1];
-            }
-            else
-            { 
-                nextChunkWrite = 0;
+                nextChunkWrite = windowLength + windowStart;
+                if (nextChunkWrite < 0) nextChunkWrite = 0;
+
+                windowStart = this.previousLength + windowStart;
+                startPtr = this.previousChunk + windowStart;
             }
 
             do
@@ -94,24 +104,20 @@ namespace OpenBlam.Core.Compression.Deflate
         /// </summary>
         /// <param name="length"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Advance(int delta)
+        private byte* GetWriteLocation(int size)
         {
-            this.absolutePosition += delta;
-
-            var newPos = this.currentPosition + delta;
-            var chunkOverflow = newPos - CHUNK_SIZE;
-            if (chunkOverflow < 0)
+            if (currentPosition + size >= CHUNK_SIZE)
             {
-                this.currentPosition = newPos;
-                this.currentChunkFree -= delta;
-                return;
+                this.previousChunk = this.currentChunk;
+                this.previousLength = this.currentPosition;
+                this.memoryHandleList[this.currentChunkIndex] = (this.memoryHandleList[this.currentChunkIndex].handle, this.currentPosition);
+
+                this.currentChunk = AllocateChunk();
+                this.currentPosition = 0;
+                this.currentChunkIndex++;
             }
 
-            Debug.Assert(chunkOverflow == 0, "Writing must always stop at a chunk boundary");
-
-            this.currentPosition = 0;
-            this.currentChunkFree = CHUNK_SIZE;
-            this.currentChunk = AllocateChunk();
+            return this.currentChunk + this.currentPosition;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -119,26 +125,30 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             var newBuf = outputBufferPool.Rent(CHUNK_SIZE);
             var handle = GCHandle.Alloc(newBuf, GCHandleType.Pinned);
-            this.memoryHandleList.Add(handle);
+            this.memoryHandleList.Add((handle, 0));
             var ptr = handle.AddrOfPinnedObject();
-            this.memoryPtrList.Add(ptr);
             return (byte*)ptr;
         }
 
         public byte[] ToArray()
         {
-            var output = new byte[absolutePosition];
+            this.memoryHandleList[this.memoryHandleList.Count - 1] = (this.memoryHandleList[this.memoryHandleList.Count - 1].handle, this.currentPosition);
+
+            long total = 0;
+            foreach(var (_, length) in this.memoryHandleList)
+            {
+                total += length;
+            }
+
+            var output = new byte[total];
+            long written = 0;
             fixed (byte* outp = output)
             {
-                var written = 0;
-                for (int i = 0; i < memoryHandleList.Count - 1; i++)
+                foreach(var (handle, length) in this.memoryHandleList)
                 {
-                    Buffer.MemoryCopy((byte*)this.memoryPtrList[i], outp + i * CHUNK_SIZE, output.Length - written, CHUNK_SIZE);
-                    written += CHUNK_SIZE;
+                    Buffer.MemoryCopy((byte*)handle.AddrOfPinnedObject(), outp + written, total - written, length);
+                    written += length;
                 }
-
-                var remaining = this.absolutePosition - written;
-                Buffer.MemoryCopy((byte*)this.memoryPtrList[memoryHandleList.Count - 1], outp + written, output.Length - written, remaining);
             }
 
             return output;
@@ -146,19 +156,18 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public void Dispose()
         {
-            ReleaseResources();
-        }
-
-        private void ReleaseResources()
-        {
             lock (this.memoryHandleList)
-                foreach (var handle in this.memoryHandleList)
+            {
+                for (var i = 0; i < this.memoryHandleList.Count; i++)
                 {
+                    var (handle, _) = this.memoryHandleList[i];
                     var buf = (byte[])handle.Target;
                     handle.Free();
                     outputBufferPool.Return(buf);
-                    this.memoryHandleList.Remove(handle);
                 }
+
+                this.memoryHandleList = null;
+            }
         }
     }
 }
