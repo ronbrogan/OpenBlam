@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal unsafe sealed class DeflateOutputBuffer : DeflateOutput<IntPtr>, IDisposable
+    internal unsafe sealed class DeflateOutputBuffer : DeflateOutput<byte[]>, IDisposable
     {
         // CHUNK_SIZE should never be under 65535, this way we can 
         // guarantee only one possible chunk gap when reading/writing
@@ -30,9 +30,10 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Write(IntPtr data, int dataLength)
+        public override void Write(byte[] data, int dataLength)
         {
-            Write((byte*)data, dataLength);
+            fixed (byte* b = data)
+                Write(b, dataLength);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
