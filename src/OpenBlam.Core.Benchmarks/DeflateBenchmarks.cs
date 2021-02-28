@@ -9,7 +9,7 @@ using System.IO.Compression;
 
 namespace OpenBlam.Core.Benchmarks
 {
-    [MemoryDiagnoser]
+    [ShortRunJob, MemoryDiagnoser]
     public class DeflateBenchmarks
     {
         private byte[] UnCompressed_1MiB;

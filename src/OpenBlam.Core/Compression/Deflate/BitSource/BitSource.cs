@@ -89,7 +89,7 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SkipToNextByte()
+        public virtual void SkipToNextByte()
         {
             currentBit >>= 3;
             currentBit++;

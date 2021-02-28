@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Runtime.CompilerServices;
 
 namespace OpenBlam.Core.Compression.Deflate
@@ -7,9 +6,18 @@ namespace OpenBlam.Core.Compression.Deflate
     public sealed class StreamBitSource : BitSource
     {
         private readonly Stream Data;
+        private byte[] buffer = new byte[8];
+
         public StreamBitSource(Stream data)
         {
             this.Data = data;
+        }
+
+        public override void SkipToNextByte()
+        {
+            base.SkipToNextByte();
+
+            Data.Position = (int)(this.CurrentBit << 3);
         }
 
         protected override void EnsureBits(int need)
@@ -19,12 +27,15 @@ namespace OpenBlam.Core.Compression.Deflate
                 // read bits from currentBit
                 var startByte = (int)(currentBit >> 3);
                 this.currentLocalBit = (int)(currentBit & 7);
-                Data.Position = startByte;
+                
+                if(Data.Position != startByte)
+                {
+                    Data.Position = startByte;
+                }
 
-                Span<byte> bytes = stackalloc byte[8];
-                var bytesRead = Data.Read(bytes);
+                var bytesRead = Data.Read(buffer);
 
-                var accum = Unsafe.As<byte, ulong>(ref bytes[0]);
+                var accum = Unsafe.As<byte, ulong>(ref buffer[0]);
 
                 BroadcastTo16s(accum);
 
