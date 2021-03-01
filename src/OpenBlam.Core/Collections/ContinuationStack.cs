@@ -9,20 +9,20 @@ namespace OpenBlam.Core.Collections
 
         public void PushFull(T value)
         {
-            store.Push((value, true));
-            store.Push((value, false));
+            this.store.Push((value, true));
+            this.store.Push((value, false));
         }
 
         public void PushSeparate(T value, bool isContinuation)
         {
-            store.Push((value, isContinuation));
+            this.store.Push((value, isContinuation));
         }
 
         public bool TryPop(out T value, out bool isContinuation)
         {
-            if(store.Any())
+            if(this.store.Any())
             {
-                var values = store.Pop();
+                var values = this.store.Pop();
                 value = values.Item1;
                 isContinuation = values.Item2;
                 return true;

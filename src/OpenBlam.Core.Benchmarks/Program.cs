@@ -12,14 +12,17 @@ namespace OpenBlam.Core.Benchmarks
             if(args.Length  == 0)
             { 
                 var b = new DeflateCorpus();
+                var info = b.GetData().First(d => d.ToString() == "kennedy.xls");
 
                 Thread.Sleep(2000);
 
-                b.Burnside_ByteArray(b.GetData().Last());
+                for(var i = 0; i < 100; i++)
+                    b.Burnside_ByteArray(info);
 
                 Thread.Sleep(2000);
 
-                b.Burnside_Stream(b.GetData().Last());
+                for (var i = 0; i < 100; i++)
+                    b.Burnside_Stream(info);
             }
             else
             {

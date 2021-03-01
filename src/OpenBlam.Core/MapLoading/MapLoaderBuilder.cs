@@ -23,7 +23,7 @@ namespace OpenBlam.Core.MapLoading
 
         public IMapLoaderBuilder UseAncillaryMap(byte key, string mapName)
         {
-            ancillaryMaps.Add(key, mapName);
+            this.ancillaryMaps.Add(key, mapName);
             return this;
         }
 

@@ -81,11 +81,11 @@ namespace OpenBlam.Core.MapLoading
         /// <param name="loadCallback">An optional callback that will be invoked after each map is created</param>
         public TMap Load<TMap>(Stream mapStream, MapLoadCallback loadCallback = null) where TMap : IMap, new()
         {
-            var reader = GetAggregateStream(mapStream);
+            var reader = this.GetAggregateStream(mapStream);
 
             var map = this.CreateMap<TMap>(reader);
 
-            foreach(var id in config.AncillaryMaps.Keys)
+            foreach(var id in this.config.AncillaryMaps.Keys)
             {
                 var anc = this.CreateMap<TMap>(reader, id);
                 map.UseAncillaryMap(id, anc);
@@ -105,11 +105,11 @@ namespace OpenBlam.Core.MapLoading
         /// <param name="loadCallback">An optional callback that will be invoked after each map is created</param>
         public TMap Load<TMap>(Stream mapStream, MapStreamTransform streamTransform, MapLoadCallback loadCallback = null) where TMap : IMap, new()
         {
-            var reader = GetAggregateStream(mapStream, streamTransform);
+            var reader = this.GetAggregateStream(mapStream, streamTransform);
 
             var map = this.CreateMap<TMap>(reader);
 
-            foreach (var id in config.AncillaryMaps.Keys)
+            foreach (var id in this.config.AncillaryMaps.Keys)
             {
                 var anc = this.CreateMap<TMap>(reader, id);
                 map.UseAncillaryMap(id, anc);

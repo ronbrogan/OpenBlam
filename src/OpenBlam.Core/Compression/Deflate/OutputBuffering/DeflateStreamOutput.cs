@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -9,6 +10,8 @@ namespace OpenBlam.Core.Compression.Deflate
 {
     internal unsafe sealed class DeflateStreamOutput : DeflateOutput<Stream>, IDisposable
     {
+        private static ArrayPool<byte> bufferPool = ArrayPool<byte>.Create();
+
         private readonly Stream outstream;
         private const int LookbackCopyThreshold = 2 * DeflateConstants.MaximumLookback;
 
@@ -25,11 +28,11 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             this.outstream = outstream;
 
-            this.lookbackBufferObject = new byte[3 * DeflateConstants.MaximumLookback];
+            this.lookbackBufferObject = bufferPool.Rent(3 * DeflateConstants.MaximumLookback);
             this.lookbackBufferHandle = GCHandle.Alloc(this.lookbackBufferObject, GCHandleType.Pinned);
             this.lookbackBuffer = (byte*)this.lookbackBufferHandle.AddrOfPinnedObject();
 
-            this.copyBufferObject = new byte[LookbackCopyThreshold];
+            this.copyBufferObject = bufferPool.Rent(LookbackCopyThreshold);
             this.copyBufferHandle = GCHandle.Alloc(this.copyBufferObject, GCHandleType.Pinned);
             this.copyBuffer = (byte*)this.copyBufferHandle.AddrOfPinnedObject();
         }
@@ -44,23 +47,23 @@ namespace OpenBlam.Core.Compression.Deflate
                 this.outstream.Write(this.copyBufferObject, 0, actualRead);
                 length -= actualRead;
 
-                Unsafe.CopyBlock(ref lookbackBuffer[lookbackPosition], ref copyBuffer[0], (uint)actualRead);
-                lookbackPosition += actualRead;
-                MaintainBuffer();
+                Unsafe.CopyBlock(ref this.lookbackBuffer[this.lookbackPosition], ref this.copyBuffer[0], (uint)actualRead);
+                this.lookbackPosition += actualRead;
+                this.MaintainBuffer();
             }
         }
 
         public override void WriteByte(byte value)
         {
-            outstream.WriteByte(value);
-            lookbackBuffer[lookbackPosition] = value;
-            lookbackPosition++;
-            MaintainBuffer();
+            this.outstream.WriteByte(value);
+            this.lookbackBuffer[this.lookbackPosition] = value;
+            this.lookbackPosition++;
+            this.MaintainBuffer();
         }
 
         public override void WriteWindow(int lengthToWrite, int lookbackDistance)
         {
-            Debug.Assert(lookbackDistance < lookbackPosition);
+            Debug.Assert(lookbackDistance <= this.lookbackPosition, $"Lookback distance '{lookbackDistance}' is too high");
 
             long chunkLength = Math.Min(lookbackDistance, lengthToWrite);
             var start = this.lookbackPosition - lookbackDistance;
@@ -92,29 +95,32 @@ namespace OpenBlam.Core.Compression.Deflate
             Buffer.MemoryCopy(this.copyBuffer, this.lookbackBuffer + this.lookbackPosition, lengthToWrite, lengthToWrite);
             this.lookbackPosition += lengthToWrite;
 
-            MaintainBuffer();
+            this.MaintainBuffer();
         }
 
         private void MaintainBuffer()
         {
-            if(lookbackPosition < LookbackCopyThreshold)
+            if(this.lookbackPosition < LookbackCopyThreshold)
             {
                 return;
             }
 
             Buffer.MemoryCopy(
-                this.lookbackBuffer + lookbackPosition - DeflateConstants.MaximumLookback,
+                this.lookbackBuffer + this.lookbackPosition - DeflateConstants.MaximumLookback,
                 this.lookbackBuffer,
                 DeflateConstants.MaximumLookback,
                 DeflateConstants.MaximumLookback);
 
-            lookbackPosition = DeflateConstants.MaximumLookback;
+            this.lookbackPosition = DeflateConstants.MaximumLookback;
         }
 
         public void Dispose()
         {
             this.copyBufferHandle.Free();
             this.lookbackBufferHandle.Free();
+
+            bufferPool.Return(this.copyBufferObject, true);
+            bufferPool.Return(this.lookbackBufferObject, true);
         }
     }
 }

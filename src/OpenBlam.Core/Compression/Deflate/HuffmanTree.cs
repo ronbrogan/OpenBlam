@@ -1,14 +1,19 @@
 ﻿using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal class HuffmanTree
+    internal sealed class HuffmanTree : IDisposable
     {
         private const int AlphabetSize = 288;
         private const int DistanceValuesSize = 33;
+
+        private readonly static ArrayPool<TreeNode> NodePool = ArrayPool<TreeNode>.Create();
+        private readonly static ArrayPool<byte> LengthPool = ArrayPool<byte>.Create();
+        private readonly static ArrayPool<ushort> CodewordPool = ArrayPool<ushort>.Create();
 
         public readonly ushort LiteralLengthCodeCount;
         public readonly byte DistanceCodeCount;
@@ -20,33 +25,41 @@ namespace OpenBlam.Core.Compression.Deflate
         public HuffmanTree(BitSource data)
         {
             // Read 5 bits for LiteralLengthCodeCount
-            LiteralLengthCodeCount = (ushort)(data.ReadBitsAsUshort(5) + 257);
+            this.LiteralLengthCodeCount = (ushort)(data.ReadBitsAsUshort(5) + 257);
 
             // Read 5 bits for DistanceCodeCount
-            DistanceCodeCount = (byte)(data.ReadBitsAsUshort(5) + 1);
+            this.DistanceCodeCount = (byte)(data.ReadBitsAsUshort(5) + 1);
 
             // Read 4 bits for CodeLengthCodeCount
-            CodeLengthCodeCount = (byte)(data.ReadBitsAsUshort(4) + 4);
+            this.CodeLengthCodeCount = (byte)(data.ReadBitsAsUshort(4) + 4);
 
             // Read code length intermediate tree data
             Span<byte> mapping = stackalloc byte[] { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
             var codeLengthCodes = new byte[19];
-            for (var i = 0; i < CodeLengthCodeCount; i++)
+            for (var i = 0; i < this.CodeLengthCodeCount; i++)
             {
                 codeLengthCodes[mapping[i]] = (byte)data.ReadBitsAsUshort(3);
             }
 
             // Generate intermediate tree
-            var intermediateNodes = GenerateTreeNodes(codeLengthCodes);
-            var intermediateTree = new CodeLengthHuffmanTree(intermediateNodes);
+            var intermediateNodes = GenerateTreeNodes(codeLengthCodes, codeLengthCodes.Length);
+            using var intermediateTree = new CodeLengthHuffmanTree(intermediateNodes);
 
-            var (literalLengths, distanceLengths) = intermediateTree.ProduceLengths(
+            var literalLengths = LengthPool.Rent(AlphabetSize);
+            var distanceLengths = LengthPool.Rent(DistanceValuesSize);
+
+            intermediateTree.ProduceLengths(
                 data,
-                LiteralLengthCodeCount,
-                DistanceCodeCount);
+                this.LiteralLengthCodeCount,
+                this.DistanceCodeCount,
+                literalLengths,
+                distanceLengths);
 
-            this.literalLengthTree = GenerateTreeNodes(literalLengths);
-            this.distanceTree = GenerateTreeNodes(distanceLengths);
+            this.literalLengthTree = GenerateTreeNodes(literalLengths, AlphabetSize);
+            this.distanceTree = GenerateTreeNodes(distanceLengths, DistanceValuesSize);
+
+            LengthPool.Return(literalLengths, true);
+            LengthPool.Return(distanceLengths, true);
         }
 
         public ushort GetValue(BitSource data)
@@ -122,78 +135,88 @@ namespace OpenBlam.Core.Compression.Deflate
         }
 
         // Incoming array maps alphabet value (index) to the code length required to walk to the value
-        private static TreeNode[] GenerateTreeNodes(byte[] alphabetCodeLengths)
+        private static TreeNode[] GenerateTreeNodes(byte[] alphabetCodeLengths, int length)
         {
-            var codewords = GetAlphabetCodewords(alphabetCodeLengths);
+            ushort[] codewords = null;
 
-            Span<TreeNode> tree = stackalloc TreeNode[(codewords.Length << 1) - 1];
-
-            ushort nodeCount = 1; // root
-            var currentNode = 0;
-
-            for (ushort c = 0; c < codewords.Length; c++)
+            try
             {
-                ushort codeword = codewords[c];
+                codewords = CodewordPool.Rent(length);
+                FillAlphabetCodewords(alphabetCodeLengths, codewords, length);
 
-                var len = alphabetCodeLengths[c];
+                var tree = NodePool.Rent((length << 1) - 1);
 
-                if (len == 0)
-                    continue;
+                ushort nodeCount = 1; // root
+                var currentNode = 0;
 
-                // rhs is not significant here
-                ref var index = ref tree[currentNode].Left;
-                
-                for (int i = 0; i < len; i++)
+                for (ushort c = 0; c < length; c++)
                 {
-                    var isSet = ((codeword >> (len - i - 1)) & 1) == 1;
-                
-                    index = ref tree[currentNode].Left;
-                
-                    if (isSet)
+                    var len = alphabetCodeLengths[c];
+
+                    if (len == 0)
+                        continue;
+
+                    ushort codeword = codewords[c];
+
+                    // rhs is not significant here, just creating a ref local
+                    ref var index = ref tree[currentNode].Left;
+
+                    var bit = 1 << len - 1;
+                    for (int i = 0; i < len; i++)
                     {
-                        index = ref tree[currentNode].Right;
+                        var isSet = (codeword & bit) == bit;
+                        codeword <<= 1;
+
+                        index = ref tree[currentNode].Left;
+
+                        if (isSet)
+                        {
+                            index = ref tree[currentNode].Right;
+                        }
+
+                        if (index == 0)
+                        {
+                            index = nodeCount;
+                            nodeCount++;
+                        }
+
+                        currentNode = index;
                     }
-                
-                    if (index == 0)
-                    {
-                        index = nodeCount;
-                        nodeCount++;
-                    }
-                
-                    currentNode = index;
+
+                    // Use current node to store value
+                    nodeCount--;
+                    index = (ushort)(TreeNode.Threshold | c);
+
+                    // restart at root
+                    currentNode = 0;
                 }
-                
-                // Use current node to store value
-                nodeCount--;
-                index = (ushort)(TreeNode.Threshold | c);
 
-                // restart at root
-                currentNode = 0;
+                return tree;
             }
-
-            return tree.Slice(0, nodeCount).ToArray();
+            finally
+            {
+                if(codewords != null)
+                    CodewordPool.Return(codewords, true);
+            }
         }
 
         // Incoming array maps alphabet value (index) to the code length required to walk to the value
         // Output array maps alphabet value (index) to the codeword (bit sequence to arrive at the value)
-        internal static ushort[] GetAlphabetCodewords(byte[] alphabetCodeLengths)
+        internal static void FillAlphabetCodewords(byte[] alphabetCodeLengths, ushort[] alphabetCodes, int length)
         {
             var maxBitLength = 15;
-            var alphabetCodes = new ushort[alphabetCodeLengths.Length];
 
             // 1. Count the number of codes for each code length.
-            var bitLengths = new int[maxBitLength];
-            for (int i = 0; i < alphabetCodeLengths.Length; i++)
+            Span<int> bitLengths = stackalloc int[maxBitLength];
+            for (int i = 0; i < length; i++)
             {
-                var length = alphabetCodeLengths[i];
-
-                bitLengths[length]++;
+                bitLengths[alphabetCodeLengths[i]]++;
             }
 
             // 2. Find the numerical value of the smallest code for each code length:
             var code = 0;
             bitLengths[0] = 0;
-            var nextCode = new ushort[maxBitLength + 1];
+            Span<ushort> nextCode = stackalloc ushort[maxBitLength + 1];
             for (var bits = 1; bits <= maxBitLength; bits++)
             {
                 code = (code + bitLengths[bits - 1]) << 1;
@@ -205,7 +228,7 @@ namespace OpenBlam.Core.Compression.Deflate
             //  values determined at step 2. Codes that are never used
             //  (which have a bit length of zero) must not be assigned a value.
             var len = 0;
-            for (var n = 0; n < alphabetCodeLengths.Length; n++)
+            for (var n = 0; n < length; n++)
             {
                 len = alphabetCodeLengths[n];
                 if (len != 0)
@@ -214,11 +237,17 @@ namespace OpenBlam.Core.Compression.Deflate
                     nextCode[len]++;
                 }
             }
-
-            return alphabetCodes;
         }
 
-        public static HuffmanTree Fixed { get; set; } = new HuffmanTree();
+        public void Dispose()
+        {
+            NodePool.Return(this.distanceTree, true);
+            NodePool.Return(this.literalLengthTree, true);
+        }
+
+        public static HuffmanTree Fixed => fixedTree.Value;
+
+        private static Lazy<HuffmanTree> fixedTree = new Lazy<HuffmanTree>(() => new HuffmanTree());
 
         private HuffmanTree()
         {
@@ -244,11 +273,11 @@ namespace OpenBlam.Core.Compression.Deflate
                 }
             }
 
-            this.literalLengthTree = GenerateTreeNodes(fixedLengths);
+            this.literalLengthTree = GenerateTreeNodes(fixedLengths, fixedLengths.Length);
             this.distanceTree = null;
         }
 
-        private class CodeLengthHuffmanTree
+        private class CodeLengthHuffmanTree : IDisposable
         {
             private readonly TreeNode[] tree;
 
@@ -257,20 +286,25 @@ namespace OpenBlam.Core.Compression.Deflate
                 this.tree = tree;
             }
 
-            internal (byte[] literalLengths, byte[] distanceLengths) ProduceLengths(
+            public void Dispose()
+            {
+                HuffmanTree.NodePool.Return(this.tree, true);
+            }
+
+            internal void ProduceLengths(
                 BitSource data,
                 ushort literalLengthCodeCount,
-                byte distanceCodeCount)
+                byte distanceCodeCount,
+                byte[] literalLengths,
+                byte[] distanceLengths)
             {
                 var valuesToProduce = literalLengthCodeCount + distanceCodeCount;
-                var literalLengths = new byte[AlphabetSize];
-                var distanceLengths = new byte[DistanceValuesSize];
 
                 var valuesProduced = 0;
                 byte lastValueProduced = 0;
                 while (valuesProduced < valuesToProduce)
                 {
-                    var node = tree[0];
+                    var node = this.tree[0];
                     byte codeLength = 0;
 
                     while(true)
@@ -284,7 +318,7 @@ namespace OpenBlam.Core.Compression.Deflate
                             break;
                         }
 
-                        node = tree[branch];
+                        node = this.tree[branch];
                     }
 
                     //0 - 15: Represent code lengths of 0 - 15
@@ -330,8 +364,6 @@ namespace OpenBlam.Core.Compression.Deflate
                             break;
                     }
                 }
-
-                return (literalLengths, distanceLengths);
 
                 void ProduceValue(byte value)
                 {

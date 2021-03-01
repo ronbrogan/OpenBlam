@@ -57,11 +57,9 @@ namespace OpenBlam.Core.Compression
 
         public static void Decompress<T>(T data, BitSource bits, DeflateOutput<T> output)
         {
-            DeflateBlock currentBlock;
-
-            do
+            while(true)
             {
-                currentBlock = new DeflateBlock(bits);
+                using var currentBlock = new DeflateBlock(bits);
 
                 if (currentBlock.Type == BlockType.NoCompression)
                 {
@@ -101,8 +99,12 @@ namespace OpenBlam.Core.Compression
                         }
                     }
                 }
+
+                if(currentBlock.IsFinal)
+                {
+                    break;
+                }
             }
-            while (!currentBlock.IsFinal);
         }
     }
 }

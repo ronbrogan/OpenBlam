@@ -21,7 +21,7 @@ namespace OpenBlam.Core.MapLoading
                 throw new ArgumentException(nameof(key), "Ancillary maps can only be index 1 or greater");
             }
 
-            ancillaryMaps[key] = map;
+            this.ancillaryMaps[key] = map;
         }
 
         public Stream Map => this.map;

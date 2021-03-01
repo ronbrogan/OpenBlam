@@ -15,40 +15,40 @@ namespace OpenBlam.Core.FileSystem
 
         public FileWatcher(string path)
         {
-            callbacks = new List<FileWatcherCallback>();
-            originalPath = path;
-            watcher = new FileSystemWatcher(Path.GetDirectoryName(path))
+            this.callbacks = new List<FileWatcherCallback>();
+            this.originalPath = path;
+            this.watcher = new FileSystemWatcher(Path.GetDirectoryName(path))
             {
                 Filter = Path.GetFileName(path)
             };
 
             //watcher.Changed += this.W_Changed;
-            watcher.NotifyFilter = NotifyFilters.LastWrite;
-            Observable.FromEventPattern<FileSystemEventHandler, FileSystemEventArgs>(h => watcher.Changed += h, h => watcher.Changed -= h)
+            this.watcher.NotifyFilter = NotifyFilters.LastWrite;
+            Observable.FromEventPattern<FileSystemEventHandler, FileSystemEventArgs>(h => this.watcher.Changed += h, h => this.watcher.Changed -= h)
                 .Throttle(TimeSpan.FromMilliseconds(300))
-                .Subscribe(a => W_Changed(a.Sender, a.EventArgs));
+                .Subscribe(a => this.W_Changed(a.Sender, a.EventArgs));
 
-            watcher.EnableRaisingEvents = true;
+            this.watcher.EnableRaisingEvents = true;
 
         }
 
         public IDisposable AddListener(Action<string> action)
         {
-            return new FileWatcherCallback(action, callbacks);
+            return new FileWatcherCallback(action, this.callbacks);
         }
 
         public void Dispose()
         {
             this.watcher?.Dispose();
 
-            foreach (var cb in callbacks)
+            foreach (var cb in this.callbacks)
                 cb.Dispose();
         }
 
         private void W_Changed(object sender, FileSystemEventArgs e)
         {
-            foreach (var cb in callbacks)
-                cb.Invoke(originalPath);
+            foreach (var cb in this.callbacks)
+                cb.Invoke(this.originalPath);
         }
 
         private class FileWatcherCallback : IDisposable
@@ -73,7 +73,7 @@ namespace OpenBlam.Core.FileSystem
             {
                 try
                 {
-                    cbs.Remove(this);
+                    this.cbs.Remove(this);
                 }
                 catch (Exception) { }
             }

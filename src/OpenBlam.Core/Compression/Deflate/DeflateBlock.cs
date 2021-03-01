@@ -1,4 +1,6 @@
-﻿namespace OpenBlam.Core.Compression.Deflate
+﻿using System;
+
+namespace OpenBlam.Core.Compression.Deflate
 {
     internal enum BlockType : byte
     {
@@ -8,7 +10,7 @@
         Reserved = 3,
     }
 
-    internal struct DeflateBlock
+    internal struct DeflateBlock : IDisposable
     {
         public HuffmanTree HuffmanTree;
         public BitSource Compressed;
@@ -17,36 +19,44 @@
 
         public DeflateBlock(BitSource data)
         {
-            Compressed = data;
+            this.Compressed = data;
 
-            IsFinal = data.IsSet();
+            this.IsFinal = data.IsSet();
 
-            Type = (BlockType)data.ReadBitsAsUshort(2);
+            this.Type = (BlockType)data.ReadBitsAsUshort(2);
 
-            if (Type == BlockType.DynamicHuffmanCodes)
+            if (this.Type == BlockType.DynamicHuffmanCodes)
             {
-                HuffmanTree = new HuffmanTree(data);
+                this.HuffmanTree = new HuffmanTree(data);
             }
-            else if (Type == BlockType.FixedHuffmanCodes)
+            else if (this.Type == BlockType.FixedHuffmanCodes)
             {
-                HuffmanTree = HuffmanTree.Fixed;
+                this.HuffmanTree = HuffmanTree.Fixed;
             }
             else
             {
-                HuffmanTree = null;
+                this.HuffmanTree = null;
             }
         }
 
         public ushort GetNextValue()
         {
-            return this.HuffmanTree.GetValue(Compressed);
+            return this.HuffmanTree.GetValue(this.Compressed);
         }
 
         public (ushort length, ushort distance) GetLengthAndDistance(ushort rawValue)
         {
-            var length = this.HuffmanTree.GetLength(Compressed, rawValue);
-            var distance = this.HuffmanTree.GetDistance(Compressed);
+            var length = this.HuffmanTree.GetLength(this.Compressed, rawValue);
+            var distance = this.HuffmanTree.GetDistance(this.Compressed);
             return (length, distance);
+        }
+
+        public void Dispose()
+        {
+            if (this.Type == BlockType.DynamicHuffmanCodes)
+            {
+                this.HuffmanTree?.Dispose();
+            }
         }
     }
 }

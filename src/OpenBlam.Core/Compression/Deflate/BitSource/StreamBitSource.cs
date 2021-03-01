@@ -1,23 +1,28 @@
-﻿using System.IO;
+﻿using System;
+using System.Buffers;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    public sealed class StreamBitSource : BitSource
+    public sealed class StreamBitSource : BitSource, IDisposable
     {
         private readonly Stream Data;
-        private byte[] buffer = new byte[8];
+        private byte[] buffer ;
 
         public StreamBitSource(Stream data)
         {
             this.Data = data;
+            this.buffer = bufferPool.Rent(8);
+            Array.Clear(this.buffer, 0, 8);
         }
 
         public override void SkipToNextByte()
         {
             base.SkipToNextByte();
 
-            Data.Position = (int)(this.CurrentBit << 3);
+            this.Data.Position = (int)(this.CurrentBit << 3);
         }
 
         protected override void EnsureBits(int need)
@@ -25,25 +30,41 @@ namespace OpenBlam.Core.Compression.Deflate
             if (need > this.availableLocalBits)
             {
                 // read bits from currentBit
-                var startByte = (int)(currentBit >> 3);
-                this.currentLocalBit = (int)(currentBit & 7);
+                var startByte = (int)(this.currentBit >> 3);
+                this.currentLocalBit = (int)(this.currentBit & 7);
                 
-                if(Data.Position != startByte)
+                if(this.Data.Position != startByte)
                 {
-                    Data.Position = startByte;
+                    this.Data.Position = startByte;
                 }
 
-                var bytesRead = Data.Read(buffer);
+                var bytesRead = this.Data.Read(this.buffer);
 
-                var accum = Unsafe.As<byte, ulong>(ref buffer[0]);
+                var accum = Unsafe.As<byte, ulong>(ref this.buffer[0]);
 
-                BroadcastTo16s(accum);
+                this.BroadcastTo16s(accum);
 
                 accum >>= this.currentLocalBit;
 
                 this.localBits = accum;
                 this.availableLocalBits = 64 - this.currentLocalBit;
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            
+            if (disposing)
+            {
+                if(this.buffer != null)
+                {
+                    bufferPool.Return(this.buffer);
+                    this.buffer = null;
+                }
+            }
+
+            base.Dispose(disposing);
+
         }
     }
 }

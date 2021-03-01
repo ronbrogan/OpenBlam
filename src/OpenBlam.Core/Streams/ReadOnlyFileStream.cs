@@ -25,83 +25,83 @@ namespace OpenBlam.Core.Streams
 
         private int validBufferDataLength = 0;
 
-        private long position => bufferOffset + internalOffset;
+        private long position => this.bufferOffset + this.internalOffset;
 
         public override bool CanRead => true;
         public override bool CanSeek => true;
         public override bool CanWrite => false;
-        public override long Length => fsLength;
-        public override long Position { get => position; set => EnsureRead(value, 0); }
+        public override long Length => this.fsLength;
+        public override long Position { get => this.position; set => this.EnsureRead(value, 0); }
 
         public ReadOnlyFileStream(string path)
         {
             this.fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            this.fsLength = fs.Length;
+            this.fsLength = this.fs.Length;
             this.fs.Read(this.buffer);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override byte ReadByteAt(int offset) => buffer[EnsureRead(offset, 1)];
+        public override byte ReadByteAt(int offset) => this.buffer[this.EnsureRead(offset, 1)];
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override short ReadInt16At(int offset)
         {
-            return Unsafe.ReadUnaligned<short>(ref this.buffer[EnsureRead(offset, 2)]);
+            return Unsafe.ReadUnaligned<short>(ref this.buffer[this.EnsureRead(offset, 2)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override ushort ReadUInt16At(int offset)
         {
-            return Unsafe.ReadUnaligned<ushort>(ref this.buffer[EnsureRead(offset, 2)]);
+            return Unsafe.ReadUnaligned<ushort>(ref this.buffer[this.EnsureRead(offset, 2)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int ReadInt32At(int offset)
         {
-            return Unsafe.ReadUnaligned<int>(ref this.buffer[EnsureRead(offset, 4)]);
+            return Unsafe.ReadUnaligned<int>(ref this.buffer[this.EnsureRead(offset, 4)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override uint ReadUInt32At(int offset)
         {
-            return Unsafe.ReadUnaligned<uint>(ref this.buffer[EnsureRead(offset, 4)]);
+            return Unsafe.ReadUnaligned<uint>(ref this.buffer[this.EnsureRead(offset, 4)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override float ReadFloatAt(int offset)
         {
-            return Unsafe.ReadUnaligned<float>(ref this.buffer[EnsureRead(offset, 4)]);
+            return Unsafe.ReadUnaligned<float>(ref this.buffer[this.EnsureRead(offset, 4)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override double ReadDoubleAt(int offset)
         {
-            return Unsafe.ReadUnaligned<double>(ref this.buffer[EnsureRead(offset, 8)]);
+            return Unsafe.ReadUnaligned<double>(ref this.buffer[this.EnsureRead(offset, 8)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override Vector2 ReadVec2At(int offset)
         {
-            return Unsafe.ReadUnaligned<Vector2>(ref this.buffer[EnsureRead(offset, 8)]);
+            return Unsafe.ReadUnaligned<Vector2>(ref this.buffer[this.EnsureRead(offset, 8)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override Vector3 ReadVec3At(int offset)
         {
-            return Unsafe.ReadUnaligned<Vector3>(ref this.buffer[EnsureRead(offset, 12)]);
+            return Unsafe.ReadUnaligned<Vector3>(ref this.buffer[this.EnsureRead(offset, 12)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override Vector4 ReadVec4At(int offset)
         {
-            return Unsafe.ReadUnaligned<Vector4>(ref this.buffer[EnsureRead(offset, 16)]);
+            return Unsafe.ReadUnaligned<Vector4>(ref this.buffer[this.EnsureRead(offset, 16)]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override Quaternion ReadQuaternionAt(int offset)
         {
-            return Unsafe.ReadUnaligned<Quaternion>(ref this.buffer[EnsureRead(offset, 16)]);
+            return Unsafe.ReadUnaligned<Quaternion>(ref this.buffer[this.EnsureRead(offset, 16)]);
         }
 
         /// <summary>
@@ -137,7 +137,7 @@ namespace OpenBlam.Core.Streams
             if(count > this.validBufferDataLength)
             {
                 this.fs.Position = this.position;
-                var amountRead = fs.Read(buffer, offset, count);
+                var amountRead = this.fs.Read(buffer, offset, count);
 
                 // Update internal buffer, prep for next read
                 this.bufferOffset = this.position + amountRead;
@@ -146,7 +146,7 @@ namespace OpenBlam.Core.Streams
                 return amountRead;
             }
 
-            var start = EnsureRead(this.position, count);
+            var start = this.EnsureRead(this.position, count);
             var availableData = Math.Min(this.validBufferDataLength, count);
             Buffer.BlockCopy(this.buffer, start, buffer, offset, availableData);
             return count;
@@ -154,13 +154,13 @@ namespace OpenBlam.Core.Streams
 
         public ReadOnlySpan<byte> Read(int offset, int count)
         {
-            return ((Span<byte>)this.buffer).Slice(EnsureRead(offset, count));
+            return ((Span<byte>)this.buffer).Slice(this.EnsureRead(offset, count));
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            var newPos = fs.Seek(offset, origin);
-            EnsureRead(newPos, 0);
+            var newPos = this.fs.Seek(offset, origin);
+            this.EnsureRead(newPos, 0);
             return newPos;
         }
 

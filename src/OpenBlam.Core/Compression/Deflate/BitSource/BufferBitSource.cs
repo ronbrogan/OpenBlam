@@ -22,27 +22,27 @@ namespace OpenBlam.Core.Compression.Deflate
             if (need > this.availableLocalBits)
             {
                 // read bits from currentBit
-                var startByte = (int)(currentBit >> 3);
-                this.currentLocalBit = (int)(currentBit & 7);
+                var startByte = (int)(this.currentBit >> 3);
+                this.currentLocalBit = (int)(this.currentBit & 7);
 
-                var bytesAvailable = dataLength - startByte;
+                var bytesAvailable = this.dataLength - startByte;
 
                 ulong accum = 0;
                 if (bytesAvailable >= 8)
                 {
-                    accum = *(ulong*)(data + startByte);
+                    accum = *(ulong*)(this.data + startByte);
                 }
                 else
                 {
                     var bytesToRead = Math.Min(8, bytesAvailable);
                     for (var i = 0; i < bytesToRead; i++)
                     {
-                        ulong b = data[startByte + i];
+                        ulong b = this.data[startByte + i];
                         accum |= (b << (i << 3));
                     }
                 }
 
-                BroadcastTo16s(accum);
+                this.BroadcastTo16s(accum);
 
                 accum >>= this.currentLocalBit;
 

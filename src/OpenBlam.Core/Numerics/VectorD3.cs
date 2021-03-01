@@ -26,7 +26,7 @@ namespace OpenBlam.Core.Numerics
 
         public Vector3 ToSingle()
         {
-            return new Vector3((float)X, (float)Y, (float)Z);
+            return new Vector3((float)this.X, (float)this.Y, (float)this.Z);
         }
 
         public static VectorD3 Zero => new VectorD3(0, 0, 0);
@@ -99,7 +99,7 @@ namespace OpenBlam.Core.Numerics
         {
             if (!(obj is Vector3))
                 return false;
-            return Equals((Vector3)obj);
+            return this.Equals((Vector3)obj);
         }
 
         public bool Equals(VectorD3 other)
@@ -133,18 +133,18 @@ namespace OpenBlam.Core.Numerics
         {
             get => index switch
             {
-                0 => X,
-                1 => Y,
-                2 => Z
+                0 => this.X,
+                1 => this.Y,
+                2 => this.Z
             };
 
             set
             {
                 switch (index)
                 {
-                    case 0: X = value; break;
-                    case 1: Y = value; break;
-                    case 2: Z = value; break;
+                    case 0: this.X = value; break;
+                    case 1: this.Y = value; break;
+                    case 2: this.Z = value; break;
                     default:
                         break;
                 }
