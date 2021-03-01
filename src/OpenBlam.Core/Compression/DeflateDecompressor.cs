@@ -49,11 +49,10 @@ namespace OpenBlam.Core.Compression
 
         public unsafe static void Decompress(Stream compressed, Stream decompressed)
         {
-            var output = new DeflateStreamOutput(decompressed);
-            using (var bits = new StreamBitSource(compressed))
-            {
-                Decompress(compressed, bits, output);
-            }
+            using var output = new DeflateStreamOutput(decompressed);
+            using var bits = new StreamBitSource(compressed);
+            
+            Decompress(compressed, bits, output);
         }
 
         public static void Decompress<T>(T data, BitSource bits, DeflateOutput<T> output)
@@ -72,7 +71,6 @@ namespace OpenBlam.Core.Compression
                     // Read length and nlength?
                     var length = bits.ReadBitsAsUshort(16);
                     bits.ConsumeBit(16);
-                    //var nlength = bits.ReadBitsAsUshort(16); // one's compliment of length
 
                     // copy to output
                     output.Write(data, length);

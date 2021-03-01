@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenBlam.Core.Tests\OpenBlam.Core.Tests.csproj" />
     <ProjectReference Include="..\OpenBlam.Core\OpenBlam.Core.csproj" />
   </ItemGroup>
 

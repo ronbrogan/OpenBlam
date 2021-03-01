@@ -14,6 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Corpus\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OpenBlam.Core\OpenBlam.Core.csproj" />
     <ProjectReference Include="..\OpenBlam.Serialization\OpenBlam.Serialization.csproj" OutputItemType="Analyzer">
       <PrivateAssets>none</PrivateAssets>

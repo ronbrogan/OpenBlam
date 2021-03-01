@@ -3,10 +3,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
-    internal unsafe sealed class DeflateStreamOutput : DeflateOutput<Stream>
+    internal unsafe sealed class DeflateStreamOutput : DeflateOutput<Stream>, IDisposable
     {
         private readonly Stream outstream;
         private const int LookbackCopyThreshold = 2 * DeflateConstants.MaximumLookback;
@@ -27,7 +28,6 @@ namespace OpenBlam.Core.Compression.Deflate
             this.lookbackBufferObject = new byte[3 * DeflateConstants.MaximumLookback];
             this.lookbackBufferHandle = GCHandle.Alloc(this.lookbackBufferObject, GCHandleType.Pinned);
             this.lookbackBuffer = (byte*)this.lookbackBufferHandle.AddrOfPinnedObject();
-
 
             this.copyBufferObject = new byte[LookbackCopyThreshold];
             this.copyBufferHandle = GCHandle.Alloc(this.copyBufferObject, GCHandleType.Pinned);
@@ -65,19 +65,32 @@ namespace OpenBlam.Core.Compression.Deflate
             long chunkLength = Math.Min(lookbackDistance, lengthToWrite);
             var start = this.lookbackPosition - lookbackDistance;
 
-            var source = this.lookbackBuffer + start;
-            long written = 0;
-            while (written != lengthToWrite)
+            Buffer.MemoryCopy(this.lookbackBuffer + start, this.copyBuffer, chunkLength, chunkLength);
+
+            long written = chunkLength;
+            while (written < lengthToWrite)
             {
-                var dest = this.copyBuffer + written;
-                Buffer.MemoryCopy(source, dest, chunkLength, chunkLength);
+                if (chunkLength == 1)
+                {
+                    *(this.copyBuffer + written) = *this.copyBuffer;
+                }
+                else if (chunkLength < 32 && Avx2.IsSupported)
+                {
+                    var t = Avx2.LoadVector256(this.copyBuffer + written - chunkLength);
+                    Avx2.Store(this.copyBuffer + written, t);
+                }
+                else
+                {
+                    Buffer.MemoryCopy(this.copyBuffer + written - chunkLength, this.copyBuffer + written, chunkLength, chunkLength);
+                }
+
                 written += chunkLength;
             }
 
-            this.outstream.Write(this.copyBufferObject, 0, (int)written);
+            this.outstream.Write(this.copyBufferObject, 0, lengthToWrite);
 
-            Buffer.MemoryCopy(this.copyBuffer, this.lookbackBuffer + this.lookbackPosition, written, written);
-            this.lookbackPosition += written;
+            Buffer.MemoryCopy(this.copyBuffer, this.lookbackBuffer + this.lookbackPosition, lengthToWrite, lengthToWrite);
+            this.lookbackPosition += lengthToWrite;
 
             MaintainBuffer();
         }
@@ -96,6 +109,12 @@ namespace OpenBlam.Core.Compression.Deflate
                 DeflateConstants.MaximumLookback);
 
             lookbackPosition = DeflateConstants.MaximumLookback;
+        }
+
+        public void Dispose()
+        {
+            this.copyBufferHandle.Free();
+            this.lookbackBufferHandle.Free();
         }
     }
 }

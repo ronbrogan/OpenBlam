@@ -9,6 +9,9 @@ namespace OpenBlam.Core.Compression.Deflate
 {
     public unsafe abstract class BitSource : IDisposable
     {
+        private byte* localBitsAsBytesPtr;
+        private GCHandle localBitsAsBytesHandle;
+
         public ulong CurrentBit => currentBit;
         protected ulong currentBit;
 
@@ -16,8 +19,6 @@ namespace OpenBlam.Core.Compression.Deflate
         protected int currentLocalBit = 0;
         protected ulong localBits;
         protected byte[] localBitsAsBytes = new byte[64];
-        protected byte* localBitsAsBytesPtr;
-        protected GCHandle localBitsAsBytesHandle;
 
         public BitSource()
         {

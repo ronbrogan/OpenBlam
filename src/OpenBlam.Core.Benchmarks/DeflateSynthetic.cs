@@ -9,8 +9,8 @@ using System.IO.Compression;
 
 namespace OpenBlam.Core.Benchmarks
 {
-    [ShortRunJob, MemoryDiagnoser]
-    public class DeflateBenchmarks
+    [MemoryDiagnoser]
+    public class DeflateSynthetic
     {
         private byte[] UnCompressed_1MiB;
         private byte[] Compressed_1MiB;
@@ -20,7 +20,7 @@ namespace OpenBlam.Core.Benchmarks
         private byte[] UnCompressed_50MiB;
 
         
-        public DeflateBenchmarks()
+        public DeflateSynthetic()
         {
             var rand = new Random(42);
 

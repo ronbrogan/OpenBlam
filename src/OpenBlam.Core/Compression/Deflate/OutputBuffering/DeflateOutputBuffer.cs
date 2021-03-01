@@ -25,9 +25,17 @@ namespace OpenBlam.Core.Compression.Deflate
         private byte* previousChunk;
         private long previousLength;
 
+        private GCHandle copyBufferHandle;
+        private byte[] copyBufferObject;
+        private byte* copyBuffer;
+
         public DeflateOutputBuffer()
         {
             this.currentChunk = AllocateChunk();
+
+            this.copyBufferObject = new byte[512];
+            this.copyBufferHandle = GCHandle.Alloc(this.copyBufferObject, GCHandleType.Pinned);
+            this.copyBuffer = (byte*)this.copyBufferHandle.AddrOfPinnedObject();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,19 +96,38 @@ namespace OpenBlam.Core.Compression.Deflate
                 startPtr = this.previousChunk + windowStart;
             }
 
-            do
-            {
-                var toWrite = Math.Min(windowLength, lengthToWrite);
-                lengthToWrite -= toWrite;
+            long toWrite = Math.Min(windowLength, lengthToWrite);
+            long firstWrite = toWrite - nextChunkWrite;
+            Buffer.MemoryCopy(startPtr, this.copyBuffer, firstWrite, firstWrite);
+            Buffer.MemoryCopy(endPtr, this.copyBuffer + firstWrite, nextChunkWrite, nextChunkWrite);
 
-                Write(startPtr, toWrite - nextChunkWrite);
-                Write(endPtr, nextChunkWrite);
-            } while (lengthToWrite > 0);
+            var written = toWrite;
+
+            while (lengthToWrite > written)
+            {
+                if (toWrite == 1)
+                {
+                    *(this.copyBuffer + written) = *this.copyBuffer;
+                }
+                else if (toWrite < 32 && Avx2.IsSupported)
+                {
+                    var t = Avx2.LoadVector256(this.copyBuffer + written - toWrite);
+                    Avx2.Store(this.copyBuffer + written, t);
+                }
+                else
+                {
+                    Buffer.MemoryCopy(this.copyBuffer + written - toWrite, this.copyBuffer + written, toWrite, toWrite);
+                }
+
+                written += toWrite;
+            }
+
+            Write(this.copyBuffer, lengthToWrite);
         }
 
         /// <summary>
-        /// Writing must always stop at a chunk boundary and Advance the position
-        /// This method will allocate the next chunk and set appropriate values
+        /// Check if there's enough space in the current chunk
+        /// If not, this will allocate a new chunk and return the new chunk's pointer
         /// </summary>
         /// <param name="length"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -156,6 +183,8 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public void Dispose()
         {
+            this.copyBufferHandle.Free();
+
             lock (this.memoryHandleList)
             {
                 for (var i = 0; i < this.memoryHandleList.Count; i++)

@@ -9,21 +9,27 @@ namespace OpenBlam.Core.Benchmarks
     {
         static void Main(string[] args)
         {
-            if (args.Length > 0 && args[0] == "profile")
-            {
-                var b = new DeflateBenchmarks();
+            if(args.Length  == 0)
+            { 
+                var b = new DeflateCorpus();
 
                 Thread.Sleep(2000);
 
-                b.DeflateDecompressor_Decompress(b.GetData().Last());
+                b.Burnside_ByteArray(b.GetData().Last());
 
                 Thread.Sleep(2000);
 
-                b.DeflateDecompressor_DecompressStream(b.GetData().Last());
+                b.Burnside_Stream(b.GetData().Last());
             }
             else
             {
-                BenchmarkRunner.Run<DeflateBenchmarks>();
+                var benchmarkType = args[0] switch
+                {
+                    "deflate-synthetic" => typeof(DeflateSynthetic),
+                    "deflate-corpus" => typeof(DeflateCorpus)
+                };
+
+                BenchmarkSwitcher.FromTypes(new[] { benchmarkType }).Run(((Span<string>)args).Slice(1).ToArray());
             }
 
             Console.WriteLine("Done");
