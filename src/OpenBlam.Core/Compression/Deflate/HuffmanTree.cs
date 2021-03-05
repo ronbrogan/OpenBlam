@@ -181,53 +181,41 @@ namespace OpenBlam.Core.Compression.Deflate
                 treePointer = (uint*)treeNodePointer;
 
                 ushort nodeCount = 1; // root
-                var currentNode = 0;
 
-                for (ushort c = 0; c < length; c++)
+                for (int c = length - 1; c >= 0; c--)
                 {
                     var len = alphabetCodeLengths[c];
 
                     if (len == 0)
                         continue;
 
-                    ushort codeword = codewords[c];
+                    long currentNode = 0;
+                    long codeword = codewords[c];
+                    ushort* indexPtr = (ushort*)0;
 
-                    // rhs is not significant here, just creating a ref local
-                    ref var index = ref tree[currentNode].Left;
-
-                    var bit = 1 << len - 1;
-                    for (int i = 0; i < len; i++)
+                    var shift = len - 1;
+                    for (int i = 0; i < len; i++, shift--)
                     {
-                        var isSet = (codeword & bit) == bit;
-                        codeword <<= 1;
+                        var isSet = (codeword >> shift) & 1;
 
-                        index = ref tree[currentNode].Left;
+                        indexPtr = ((ushort*)treePointer) + (2 * currentNode) + isSet;
 
-                        if (isSet)
+                        if (*indexPtr == 0)
                         {
-                            index = ref tree[currentNode].Right;
+                            *indexPtr = nodeCount++;
                         }
 
-                        if (index == 0)
-                        {
-                            index = nodeCount;
-                            nodeCount++;
-                        }
-
-                        currentNode = index;
+                        currentNode = *indexPtr;
                     }
 
                     // Use current node to store value
                     nodeCount--;
-                    index = (ushort)(TreeNode.Threshold | c);
+                    *indexPtr = (ushort)(TreeNode.Threshold | c);
 
                     if(c >= extraBitsOffset && extraBitsEmbed != null)
                     {
-                        index |= (ushort)(extraBitsEmbed[c - extraBitsOffset] << 9);
+                        *indexPtr |= (ushort)(extraBitsEmbed[c - extraBitsOffset] << 9);
                     }
-
-                    // restart at root
-                    currentNode = 0;
                 }
 
                 return tree;

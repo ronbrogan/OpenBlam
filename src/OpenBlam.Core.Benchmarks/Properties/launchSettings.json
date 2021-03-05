@@ -2,7 +2,7 @@
   "profiles": {
     "OpenBlam.Core.Benchmarks": {
         "commandName": "Project",
-        "commandLineArgs": ""
+        "commandLineArgs": "deflate-corpus -f * -j short"
     }
   }
 }
