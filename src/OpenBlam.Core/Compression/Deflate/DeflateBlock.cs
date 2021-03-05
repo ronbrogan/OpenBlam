@@ -39,16 +39,15 @@ namespace OpenBlam.Core.Compression.Deflate
             }
         }
 
-        public ushort GetNextValue()
+        public uint GetNextValue()
         {
-            return this.HuffmanTree.GetValue(this.Compressed);
+            return this.HuffmanTree.GetValue();
         }
 
-        public (ushort length, ushort distance) GetLengthAndDistance(ushort rawValue)
+        public void GetLengthAndDistance(uint rawValue, out int length, out int distance)
         {
-            var length = this.HuffmanTree.GetLength(this.Compressed, rawValue);
-            var distance = this.HuffmanTree.GetDistance(this.Compressed);
-            return (length, distance);
+            length = this.HuffmanTree.GetLength(rawValue);
+            distance = this.HuffmanTree.GetDistance();
         }
 
         public void Dispose()

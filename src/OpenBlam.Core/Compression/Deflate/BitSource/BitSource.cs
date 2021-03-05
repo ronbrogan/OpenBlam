@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OpenBlam.Core.Collections;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -8,71 +9,36 @@ using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate
 {
+
     public unsafe abstract class BitSource : IDisposable
     {
-        protected readonly static ArrayPool<byte> bufferPool = ArrayPool<byte>.Shared;
+        protected readonly static PinnedArrayPool<byte> bufferPool = PinnedArrayPool<byte>.Shared;
 
+        protected uint currentLocalBit = 0;
+        protected uint availableLocalBits = 0;
         private byte* localBitsAsBytesPtr;
-        private GCHandle localBitsAsBytesHandle;
-
-        public ulong CurrentBit => this.currentBit;
         protected ulong currentBit;
-
-        protected int availableLocalBits = 0;
-        protected int currentLocalBit = 0;
         protected ulong localBits;
         protected byte[] localBitsAsBytes;
+        public ulong CurrentBit => this.currentBit;
 
         public BitSource()
         {
-            this.localBitsAsBytes = bufferPool.Rent(64);
-            this.localBitsAsBytesHandle = GCHandle.Alloc(this.localBitsAsBytes, GCHandleType.Pinned);
-            this.localBitsAsBytesPtr = (byte*)this.localBitsAsBytesHandle.AddrOfPinnedObject();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ConsumeBit()
-        {
-            this.currentBit++;
-            this.availableLocalBits--;
-            this.currentLocalBit++;
-            this.localBits >>= 1;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ConsumeBit(byte count)
-        {
-            this.currentBit += count;
-            this.availableLocalBits -= count;
-            this.currentLocalBit += count;
-            this.localBits >>= count;
+            this.localBitsAsBytes = bufferPool.Rent(64, out this.localBitsAsBytesPtr);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSet()
         {
-            this.EnsureBits(1);
-            var val = this.BitValue() == 1;
-            this.ConsumeBit();
-            return val;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte CurrentBitValue()
-        {
-            this.EnsureBits(1);
-            var val = this.BitValue();
-            this.ConsumeBit();
-            return val;
+            var localBit = this.PrepBit();
+            return *(this.localBitsAsBytesPtr + localBit) == 16;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe byte CurrentBitValueAs16()
         {
-            this.EnsureBits(1);
-            var val = *(this.localBitsAsBytesPtr + this.currentLocalBit);
-            this.ConsumeBit();
-            return val;
+            var localBit = this.PrepBit();
+            return *(this.localBitsAsBytesPtr + localBit);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -82,12 +48,10 @@ namespace OpenBlam.Core.Compression.Deflate
 
             Debug.Assert(bits <= 16, "Only uint16 is supported here");
 
-            this.EnsureBits(bits);
+            var localBit = (int)this.PrepBits(bits);
 
-            var mask = ulong.MaxValue >> (64 - bits);
-            var value2 = this.localBits & mask;
-
-            this.ConsumeBit(bits);
+            var mask = (1u << bits) - 1;
+            var value2 = (this.localBits >> localBit) & mask;
 
             return (ushort)value2;
         }
@@ -103,32 +67,57 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ConsumeBytes(ulong byteCount)
         {
-            var bits = (int)(byteCount << 3);
+            var bits = (uint)(byteCount << 3);
 
-            this.currentBit += (uint)bits;
-            this.availableLocalBits -= bits;
+            this.currentBit += bits;
             this.currentLocalBit += bits;
-            this.localBits >>= bits;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte BitValue()
+        private uint PrepBits(uint need)
         {
-            return (byte)(this.localBits & 1);
+            var localBit = this.currentLocalBit;
+
+            if (need > this.availableLocalBits - localBit)
+            {
+                localBit = this.LoadBits();
+            }
+
+            this.currentBit += need;
+            this.currentLocalBit = localBit + need;
+
+            return localBit;
         }
 
-        protected abstract void EnsureBits(int need);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private uint PrepBit()
+        {
+            var localBit = this.currentLocalBit;
+
+            if (1 > this.availableLocalBits - localBit)
+            {
+                localBit = this.LoadBits();
+            }
+
+            this.currentBit++;
+            this.currentLocalBit = localBit + 1;
+
+            return localBit;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected abstract uint LoadBits();
 
         Vector256<byte> ByteExpansionMask = Vector256.Create(
-                (byte)0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x01, 0x01, 0x01, 0x01,
-                0x01, 0x01, 0x01, 0x01,
-                0x02, 0x02, 0x02, 0x02,
-                0x02, 0x02, 0x02, 0x02,
-                0x03, 0x03, 0x03, 0x03,
-                0x03, 0x03, 0x03, 0x03
-            );
+            (byte)0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x01, 0x01, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x01,
+            0x02, 0x02, 0x02, 0x02,
+            0x02, 0x02, 0x02, 0x02,
+            0x03, 0x03, 0x03, 0x03,
+            0x03, 0x03, 0x03, 0x03
+        );
 
         Vector256<byte> RelevantBitMask = Vector256.Create(
             0x01, 0x02, 0x04, 0x08,
@@ -142,15 +131,13 @@ namespace OpenBlam.Core.Compression.Deflate
         );
 
         Vector256<byte> Sixteens = Vector256.Create((byte)16);
-        private bool disposedValue;
+        Vector256<byte> Zero = Vector256.Create((byte)0);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected unsafe void BroadcastTo16s(ulong value)
         {
             if (Avx2.IsSupported)
             {
-                var zero = Vector256.Create((byte)0);
-
                 var a = (uint)value;
                 var b = (uint)(value >> 32);
 
@@ -163,8 +150,8 @@ namespace OpenBlam.Core.Compression.Deflate
                 z = Avx2.And(z, this.RelevantBitMask);
                 z2 = Avx2.And(z2, this.RelevantBitMask);
 
-                z = Avx2.CompareEqual(z, zero);
-                z2 = Avx2.CompareEqual(z2, zero);
+                z = Avx2.CompareEqual(z, Zero);
+                z2 = Avx2.CompareEqual(z2, Zero);
 
                 z = Avx2.Shuffle(this.Sixteens, z);
                 z2 = Avx2.Shuffle(this.Sixteens, z2);
@@ -181,14 +168,13 @@ namespace OpenBlam.Core.Compression.Deflate
             }
         }
 
+        private bool disposedValue;
         protected virtual void Dispose(bool disposing)
         {
             if (!this.disposedValue)
             {
                 if (disposing)
                 {
-                    this.localBitsAsBytesHandle.Free();
-
                     if(this.localBitsAsBytes != null)
                     {
                         bufferPool.Return(this.localBitsAsBytes);

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OpenBlam.Core.Collections;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.IO;
@@ -10,16 +11,14 @@ namespace OpenBlam.Core.Compression.Deflate
 {
     internal unsafe sealed class DeflateStreamOutput : DeflateOutput<Stream>, IDisposable
     {
-        private static ArrayPool<byte> bufferPool = ArrayPool<byte>.Create();
+        private static PinnedArrayPool<byte> bufferPool = PinnedArrayPool<byte>.Create();
 
         private readonly Stream outstream;
         private const int LookbackCopyThreshold = 2 * DeflateConstants.MaximumLookback;
 
-        private GCHandle lookbackBufferHandle;
         private byte[] lookbackBufferObject;
         private byte* lookbackBuffer;
 
-        private GCHandle copyBufferHandle;
         private byte[] copyBufferObject;
         private byte* copyBuffer;
 
@@ -28,13 +27,9 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             this.outstream = outstream;
 
-            this.lookbackBufferObject = bufferPool.Rent(3 * DeflateConstants.MaximumLookback);
-            this.lookbackBufferHandle = GCHandle.Alloc(this.lookbackBufferObject, GCHandleType.Pinned);
-            this.lookbackBuffer = (byte*)this.lookbackBufferHandle.AddrOfPinnedObject();
+            this.lookbackBufferObject = bufferPool.Rent(3 * DeflateConstants.MaximumLookback, out this.lookbackBuffer);
 
-            this.copyBufferObject = bufferPool.Rent(LookbackCopyThreshold);
-            this.copyBufferHandle = GCHandle.Alloc(this.copyBufferObject, GCHandleType.Pinned);
-            this.copyBuffer = (byte*)this.copyBufferHandle.AddrOfPinnedObject();
+            this.copyBufferObject = bufferPool.Rent(LookbackCopyThreshold, out this.copyBuffer);
         }
 
         public override void Write(Stream source, int length)
@@ -98,6 +93,7 @@ namespace OpenBlam.Core.Compression.Deflate
             this.MaintainBuffer();
         }
 
+        // TODO: remove copy, use circular buffer strategy
         private void MaintainBuffer()
         {
             if(this.lookbackPosition < LookbackCopyThreshold)
@@ -116,11 +112,8 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public void Dispose()
         {
-            this.copyBufferHandle.Free();
-            this.lookbackBufferHandle.Free();
-
-            bufferPool.Return(this.copyBufferObject, true);
-            bufferPool.Return(this.lookbackBufferObject, true);
+            bufferPool.Return(this.copyBufferObject);
+            bufferPool.Return(this.lookbackBufferObject);
         }
     }
 }

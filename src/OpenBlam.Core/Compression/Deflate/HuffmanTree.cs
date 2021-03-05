@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -10,6 +11,10 @@ namespace OpenBlam.Core.Compression.Deflate
     {
         private const int AlphabetSize = 288;
         private const int DistanceValuesSize = 33;
+        private readonly static byte[] CodeLengthMapping = new byte[] 
+        { 
+            16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 
+        };
 
         private readonly static ArrayPool<TreeNode> NodePool = ArrayPool<TreeNode>.Create();
         private readonly static ArrayPool<byte> LengthPool = ArrayPool<byte>.Create();
@@ -18,12 +23,16 @@ namespace OpenBlam.Core.Compression.Deflate
         public readonly ushort LiteralLengthCodeCount;
         public readonly byte DistanceCodeCount;
         public readonly byte CodeLengthCodeCount;
-
+        private readonly BitSource data;
         private TreeNode[] literalLengthTree;
         private TreeNode[] distanceTree;
+        private uint[] literalLengthTreeAsUint;
+        private uint[] distanceTreeAsUint;
 
         public HuffmanTree(BitSource data)
         {
+            this.data = data;
+
             // Read 5 bits for LiteralLengthCodeCount
             this.LiteralLengthCodeCount = (ushort)(data.ReadBitsAsUshort(5) + 257);
 
@@ -34,56 +43,66 @@ namespace OpenBlam.Core.Compression.Deflate
             this.CodeLengthCodeCount = (byte)(data.ReadBitsAsUshort(4) + 4);
 
             // Read code length intermediate tree data
-            Span<byte> mapping = stackalloc byte[] { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
-            var codeLengthCodes = new byte[19];
-            for (var i = 0; i < this.CodeLengthCodeCount; i++)
-            {
-                codeLengthCodes[mapping[i]] = (byte)data.ReadBitsAsUshort(3);
-            }
-
-            // Generate intermediate tree
-            var intermediateNodes = GenerateTreeNodes(codeLengthCodes, codeLengthCodes.Length);
-            using var intermediateTree = new CodeLengthHuffmanTree(intermediateNodes);
-
+            
+            var codeLengthCodes = LengthPool.Rent(19);
             var literalLengths = LengthPool.Rent(AlphabetSize);
             var distanceLengths = LengthPool.Rent(DistanceValuesSize);
 
-            intermediateTree.ProduceLengths(
-                data,
-                this.LiteralLengthCodeCount,
-                this.DistanceCodeCount,
-                literalLengths,
-                distanceLengths);
+            try
+            {
+                for (var i = 0; i < this.CodeLengthCodeCount; i++)
+                {
+                    codeLengthCodes[CodeLengthMapping[i]] = (byte)data.ReadBitsAsUshort(3);
+                }
 
-            this.literalLengthTree = GenerateTreeNodes(literalLengths, AlphabetSize);
-            this.distanceTree = GenerateTreeNodes(distanceLengths, DistanceValuesSize);
+                // Generate intermediate tree
+                var intermediateNodes = GenerateTreeNodes(codeLengthCodes, 19);
+                using var intermediateTree = new CodeLengthHuffmanTree(intermediateNodes);
 
-            LengthPool.Return(literalLengths, true);
-            LengthPool.Return(distanceLengths, true);
+                intermediateTree.ProduceLengths(
+                    data,
+                    this.LiteralLengthCodeCount,
+                    this.DistanceCodeCount,
+                    literalLengths,
+                    distanceLengths);
+
+                this.literalLengthTree = GenerateTreeNodes(literalLengths, AlphabetSize, DeflateConstants.LengthExtraBits, 257);
+                this.distanceTree = GenerateTreeNodes(distanceLengths, DistanceValuesSize, DeflateConstants.DistanceExtraBits);
+
+                this.literalLengthTreeAsUint = Unsafe.As<TreeNode[], uint[]>(ref this.literalLengthTree);
+                this.distanceTreeAsUint = Unsafe.As<TreeNode[], uint[]>(ref this.distanceTree);
+            }
+            finally
+            {
+                LengthPool.Return(codeLengthCodes, true);
+                LengthPool.Return(literalLengths, true);
+                LengthPool.Return(distanceLengths, true);
+            }
         }
 
-        public ushort GetValue(BitSource data)
+        public uint GetValue()
         {
-            var node = this.literalLengthTree[0];
+            var bitsource = this.data;
+            var tree = this.literalLengthTreeAsUint;
+
+            var node = tree[0];
             while (true)
             {
-                int branch = (ushort)(node.Branches >> data.CurrentBitValueAs16());
+                uint branch = (ushort)(node >> bitsource.CurrentBitValueAs16());
 
                 if (branch >= TreeNode.Threshold)
                 {
                     // Take lower bits
-                    return (ushort)(branch & 0x7FFF);
+                    return branch & 0x7FFF;
                 }
 
-                node = this.literalLengthTree[branch];
+                node = tree[branch];
             }
         }
 
-        public ushort GetLength(BitSource data, ushort value)
+        public int GetLength(uint value)
         {
-            Debug.Assert(value > 256, "Value must be in the 'length' range");
-
-            var index = value - 257;
+            var index = (value & 0x1FF) - 257;
 
             var length = DeflateConstants.LengthBase[index];
 
@@ -92,23 +111,26 @@ namespace OpenBlam.Core.Compression.Deflate
                 return length;
             }
 
-            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.LengthExtraBits[index]);
-            return (ushort)(length + extraBitsVal);
+            var extraBitsVal = data.ReadBitsAsUshort((byte)((value & 0x7e00) >> 9));
+            return length + extraBitsVal;
         }
 
-        public ushort GetDistance(BitSource data)
+        public int GetDistance()
         {
-            if (this.distanceTree == null)
+            var bitsource = this.data;
+            var distanceTree = this.distanceTreeAsUint;
+
+            if (distanceTree == null)
             {
                 // read 5 bits instead
                 return data.ReadBitsAsUshort(5);
             }
 
-            var node = this.distanceTree[0];
+            var node = distanceTree[0];
             int value;
             while (true)
             {
-                int branch = (ushort)(node.Branches >> data.CurrentBitValueAs16());
+                int branch = (ushort)(node >> bitsource.CurrentBitValueAs16());
 
                 if (branch >= TreeNode.Threshold)
                 {
@@ -117,25 +139,27 @@ namespace OpenBlam.Core.Compression.Deflate
                     break;
                 }
 
-                node = this.distanceTree[branch];
+                node = distanceTree[branch];
             }
 
+            var distanceValue = value & 0x1FF;
+
             // do distance extra bits
-            Debug.Assert(value < 30, "Value must be in 'distance' range");
+            Debug.Assert(distanceValue < 30, "Value must be in 'distance' range");
 
-            var distance = DeflateConstants.DistanceBase[value];
+            var distance = DeflateConstants.DistanceBase[distanceValue];
 
-            if(value <= 3)
+            if(distanceValue <= 3)
             {
                 return distance;
             }
 
-            var extraBitsVal = data.ReadBitsAsUshort(DeflateConstants.DistanceExtraBits[value]);
-            return (ushort)(distance + extraBitsVal);
+            var extraBitsVal = data.ReadBitsAsUshort((byte)((value & 0x7e00) >> 9));
+            return distance + extraBitsVal;
         }
 
         // Incoming array maps alphabet value (index) to the code length required to walk to the value
-        private static TreeNode[] GenerateTreeNodes(byte[] alphabetCodeLengths, int length)
+        private static TreeNode[] GenerateTreeNodes(byte[] alphabetCodeLengths, int length, byte[] extraBitsEmbed = null, int extraBitsOffset = 0)
         {
             ushort[] codewords = null;
 
@@ -186,6 +210,11 @@ namespace OpenBlam.Core.Compression.Deflate
                     // Use current node to store value
                     nodeCount--;
                     index = (ushort)(TreeNode.Threshold | c);
+
+                    if(c >= extraBitsOffset && extraBitsEmbed != null)
+                    {
+                        index |= (ushort)(extraBitsEmbed[c - extraBitsOffset] << 9);
+                    }
 
                     // restart at root
                     currentNode = 0;
@@ -275,6 +304,9 @@ namespace OpenBlam.Core.Compression.Deflate
 
             this.literalLengthTree = GenerateTreeNodes(fixedLengths, fixedLengths.Length);
             this.distanceTree = null;
+
+            this.literalLengthTreeAsUint = Unsafe.As<TreeNode[], uint[]>(ref this.literalLengthTree);
+            this.distanceTreeAsUint = null;
         }
 
         private class CodeLengthHuffmanTree : IDisposable
@@ -304,7 +336,9 @@ namespace OpenBlam.Core.Compression.Deflate
                 byte lastValueProduced = 0;
                 while (valuesProduced < valuesToProduce)
                 {
-                    var node = this.tree[0];
+                    var tree = this.tree;
+
+                    var node = tree[0];
                     byte codeLength = 0;
 
                     while(true)
@@ -318,7 +352,7 @@ namespace OpenBlam.Core.Compression.Deflate
                             break;
                         }
 
-                        node = this.tree[branch];
+                        node = tree[branch];
                     }
 
                     //0 - 15: Represent code lengths of 0 - 15

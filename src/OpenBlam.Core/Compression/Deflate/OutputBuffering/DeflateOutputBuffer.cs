@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OpenBlam.Core.Collections;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,18 +15,19 @@ namespace OpenBlam.Core.Compression.Deflate
         // guarantee only one possible chunk gap when reading/writing
         private const int CHUNK_SIZE = 1 << 18;
 
-        private static ArrayPool<byte> outputBufferPool = ArrayPool<byte>.Create();
+        private static PinnedArrayPool<byte> outputBufferPool = PinnedArrayPool<byte>.Create();
 
-        private List<(GCHandle handle, long length)> memoryHandleList = new();
+        private List<(byte[], long)> memoryLengthList = new();
 
         private int absolutePosition = 0;
         private int currentChunkIndex = 0;
         private long currentPosition = 0;
         private byte* currentChunk;
+        private byte[] currentChunkArray;
+
         private byte* previousChunk;
         private long previousLength;
 
-        private GCHandle copyBufferHandle;
         private byte[] copyBufferObject;
         private byte* copyBuffer;
 
@@ -33,9 +35,7 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             this.currentChunk = this.AllocateChunk();
 
-            this.copyBufferObject = outputBufferPool.Rent(512);
-            this.copyBufferHandle = GCHandle.Alloc(this.copyBufferObject, GCHandleType.Pinned);
-            this.copyBuffer = (byte*)this.copyBufferHandle.AddrOfPinnedObject();
+            this.copyBufferObject = outputBufferPool.Rent(512, out this.copyBuffer);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -56,7 +56,7 @@ namespace OpenBlam.Core.Compression.Deflate
             {
                 this.previousChunk = this.currentChunk;
                 this.previousLength = this.currentPosition;
-                this.memoryHandleList[this.currentChunkIndex] = (this.memoryHandleList[this.currentChunkIndex].handle, this.currentPosition);
+                this.memoryLengthList[this.currentChunkIndex] = (this.currentChunkArray, this.currentPosition);
 
                 this.currentChunk = this.AllocateChunk();
                 this.currentPosition = 0;
@@ -137,7 +137,7 @@ namespace OpenBlam.Core.Compression.Deflate
             {
                 this.previousChunk = this.currentChunk;
                 this.previousLength = this.currentPosition;
-                this.memoryHandleList[this.currentChunkIndex] = (this.memoryHandleList[this.currentChunkIndex].handle, this.currentPosition);
+                this.memoryLengthList[this.currentChunkIndex] = (this.currentChunkArray, this.currentPosition);
 
                 this.currentChunk = this.AllocateChunk();
                 this.currentPosition = 0;
@@ -150,19 +150,17 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private byte* AllocateChunk()
         {
-            var newBuf = outputBufferPool.Rent(CHUNK_SIZE);
-            var handle = GCHandle.Alloc(newBuf, GCHandleType.Pinned);
-            this.memoryHandleList.Add((handle, 0));
-            var ptr = handle.AddrOfPinnedObject();
-            return (byte*)ptr;
+            this.currentChunkArray = outputBufferPool.Rent(CHUNK_SIZE, out var ptr);
+            this.memoryLengthList.Add((this.currentChunkArray, 0));
+            return ptr;
         }
 
         public byte[] ToArray()
         {
-            this.memoryHandleList[this.memoryHandleList.Count - 1] = (this.memoryHandleList[this.memoryHandleList.Count - 1].handle, this.currentPosition);
+            this.memoryLengthList[this.memoryLengthList.Count - 1] = (this.memoryLengthList[this.memoryLengthList.Count - 1].Item1, this.currentPosition);
 
             long total = 0;
-            foreach(var (_, length) in this.memoryHandleList)
+            foreach(var (_, length) in this.memoryLengthList)
             {
                 total += length;
             }
@@ -171,9 +169,13 @@ namespace OpenBlam.Core.Compression.Deflate
             long written = 0;
             fixed (byte* outp = output)
             {
-                foreach(var (handle, length) in this.memoryHandleList)
+                foreach(var (buffer, length) in this.memoryLengthList)
                 {
-                    Buffer.MemoryCopy((byte*)handle.AddrOfPinnedObject(), outp + written, total - written, length);
+                    fixed(byte* source = buffer)
+                    {
+                        Buffer.MemoryCopy(source, outp + written, total - written, length);
+                    }
+                    
                     written += length;
                 }
             }
@@ -183,20 +185,17 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public void Dispose()
         {
-            this.copyBufferHandle.Free();
             outputBufferPool.Return(this.copyBufferObject);
 
-            lock (this.memoryHandleList)
+            lock (this.memoryLengthList)
             {
-                for (var i = 0; i < this.memoryHandleList.Count; i++)
+                for (var i = 0; i < this.memoryLengthList.Count; i++)
                 {
-                    var (handle, _) = this.memoryHandleList[i];
-                    var buf = (byte[])handle.Target;
-                    handle.Free();
-                    outputBufferPool.Return(buf, true);
+                    var (array, _) = this.memoryLengthList[i];
+                    outputBufferPool.Return(array);
                 }
 
-                this.memoryHandleList = null;
+                this.memoryLengthList = null;
             }
         }
     }

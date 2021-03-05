@@ -68,7 +68,7 @@ namespace OpenBlam.Core.Compression
 
                     // Read length and nlength?
                     var length = bits.ReadBitsAsUshort(16);
-                    bits.ConsumeBit(16);
+                    bits.ConsumeBytes(2);
 
                     // copy to output
                     output.Write(data, length);
@@ -81,7 +81,8 @@ namespace OpenBlam.Core.Compression
                         // decode literal/length value from input stream
                         var value = currentBlock.GetNextValue();
 
-                        if (value == DeflateConstants.EndOfBlock) // end of block
+                        // end of block
+                        if ((value & 0x1FF) == DeflateConstants.EndOfBlock) 
                         {
                             break;
                         }
@@ -93,7 +94,7 @@ namespace OpenBlam.Core.Compression
                         }
                         else // value = 257..285
                         {
-                            var (length, distance) = currentBlock.GetLengthAndDistance(value);
+                            currentBlock.GetLengthAndDistance(value, out var length, out var distance);
 
                             output.WriteWindow(length, distance);
                         }
