@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace OpenBlam.Core.Collections
 {
@@ -79,24 +80,45 @@ namespace OpenBlam.Core.Collections
 
         private class Bucket
         {
-            private ConcurrentStack<T[]> items;
+            private T[]?[] items;
+            private int index = -1;
+
             private int bufferSize;
 
             public Bucket(int bufferSize)
             {
-                this.items = new ConcurrentStack<T[]>();
+                this.items = new T[]?[100];
                 this.bufferSize = bufferSize;
             }
 
             public T[] Rent()
             {
-                if (items.TryPop(out var buffer))
+                while(true)
                 {
-                    return buffer;
-                }
-                else
-                {
-                    return Allocate(this.bufferSize);
+                    var curIndex = index;
+                    if (curIndex >= 0)
+                    {
+                        var orig = Interlocked.Exchange(ref index, curIndex-1);
+
+                        // If we got what we expected, take the array
+                        if (orig == curIndex)
+                        {
+                            var buf = this.items[orig];
+                            if (buf == null)
+                            {
+                                return this.Allocate();
+                            }
+                            else
+                            {
+                                this.items[orig] = null;
+                                return buf;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        return this.Allocate();
+                    }
                 }
             }
 
@@ -112,11 +134,30 @@ namespace OpenBlam.Core.Collections
                     Array.Clear(buffer, 0, buffer.Length);
                 }
 
-                items.Push(buffer);
+                while(true)
+                {
+                    var curIndex = index;
+                    if (curIndex < this.items.Length-1)
+                    {
+                        var orig = Interlocked.Exchange(ref index, curIndex+1);
+
+                        // If we got what we expected, store the array
+                        if (orig == curIndex)
+                        {
+                            this.items[curIndex+1] = buffer;
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // If we're full, throw away the array
+                        return;
+                    }
+                }
             }
-            private T[] Allocate(int size)
+            private T[] Allocate()
             {
-                return GC.AllocateArray<T>(size, pinned: true);
+                return GC.AllocateArray<T>(this.bufferSize, pinned: true);
             }
         }
     }
