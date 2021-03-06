@@ -16,12 +16,17 @@ namespace OpenBlam.Core.Compression.Deflate
             this.dataLength = length;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected override unsafe uint LoadBits()
+        public override void Dispose()
+        {
+        }
+
+        protected override unsafe void LoadBits()
         {
             // read bits from currentBit
-            var startByte = (int)(this.currentBit >> 3);
-            var currentBit = (uint)(this.currentBit & 7);
+            var localCurrentBit = this.state.currentBit;
+
+            var startByte = (int)(localCurrentBit >> 3);
+            var currentBit = (int)(localCurrentBit & 7);
 
             var bytesAvailable = this.dataLength - startByte;
 
@@ -40,12 +45,8 @@ namespace OpenBlam.Core.Compression.Deflate
                 }
             }
 
-            this.BroadcastTo16s(accum);
-
-            this.localBits = accum;
-            this.availableLocalBits = 64 - currentBit;
-
-            return currentBit;
+            this.state.localBits = accum >>= currentBit;
+            this.state.availableLocalBits = (uint)(64 - currentBit);
         }
     }
 }

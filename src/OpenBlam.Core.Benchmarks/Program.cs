@@ -16,12 +16,12 @@ namespace OpenBlam.Core.Benchmarks
 
                 Thread.Sleep(2000);
 
-                for(var i = 0; i < 1000; i++)
+                for(var i = 0; i < 10000; i++)
                     b.Burnside_ByteArray(info);
 
                 Thread.Sleep(2000);
 
-                for (var i = 0; i < 1000; i++)
+                for (var i = 0; i < 10000; i++)
                     b.Burnside_Stream(info);
             }
             else

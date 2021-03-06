@@ -12,33 +12,39 @@ namespace OpenBlam.Core.Compression.Deflate
 
     public unsafe abstract class BitSource : IDisposable
     {
+        [StructLayout(LayoutKind.Explicit)]
+        protected unsafe struct BitSourceState
+        {
+            [FieldOffset(0)] public uint availableLocalBits;
+            [FieldOffset(4)] public ulong currentBit;
+            [FieldOffset(12)] public ulong localBits;
+        }
+
         protected readonly static PinnedArrayPool<byte> bufferPool = PinnedArrayPool<byte>.Shared;
 
-        protected uint currentLocalBit = 0;
-        protected uint availableLocalBits = 0;
-        private byte* localBitsAsBytesPtr;
-        protected ulong currentBit;
-        protected ulong localBits;
-        protected byte[] localBitsAsBytes;
-        public ulong CurrentBit => this.currentBit;
+        protected BitSourceState state = new BitSourceState();
+        public ulong CurrentBit => this.state.currentBit;
 
         public BitSource()
         {
-            this.localBitsAsBytes = bufferPool.Rent(64, out this.localBitsAsBytesPtr);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSet()
         {
-            var localBit = this.PrepBit();
-            return *(this.localBitsAsBytesPtr + localBit) == 16;
+            this.PrepBit();
+            var v = (this.state.localBits & 1) == 1;
+            this.Consume(1);
+            return v;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe byte CurrentBitValueAs16()
+        public unsafe ulong CurrentBitValue()
         {
-            var localBit = this.PrepBit();
-            return *(this.localBitsAsBytesPtr + localBit);
+            this.PrepBit();
+            var v = this.state.localBits & 1;
+            this.Consume(1);
+            return v;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -48,10 +54,12 @@ namespace OpenBlam.Core.Compression.Deflate
 
             Debug.Assert(bits <= 16, "Only uint16 is supported here");
 
-            var localBit = (int)this.PrepBits(bits);
+            this.PrepBits(bits);
 
             var mask = (1u << bits) - 1;
-            var value2 = (this.localBits >> localBit) & mask;
+            var value2 = this.state.localBits & mask;
+
+            this.Consume(bits);
 
             return (ushort)value2;
         }
@@ -59,138 +67,46 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public virtual void SkipToNextByte()
         {
-            this.currentBit >>= 3;
-            this.currentBit++;
-            this.currentBit <<= 3;
+            this.state.currentBit >>= 3;
+            this.state.currentBit++;
+            this.state.currentBit <<= 3;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ConsumeBytes(ulong byteCount)
+        public void ConsumeBytes(int byteCount)
         {
-            var bits = (uint)(byteCount << 3);
+            var bits = (byteCount << 3);
 
-            this.currentBit += bits;
-            this.currentLocalBit += bits;
+            this.state.currentBit += (uint)bits;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private uint PrepBits(uint need)
+        private void PrepBits(int need)
         {
-            var localBit = this.currentLocalBit;
-
-            if (need > this.availableLocalBits - localBit)
+            if (need > this.state.availableLocalBits)
             {
-                localBit = this.LoadBits();
+                this.LoadBits();
             }
-
-            this.currentBit += need;
-            this.currentLocalBit = localBit + need;
-
-            return localBit;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private uint PrepBit()
+        private void PrepBit()
         {
-            var localBit = this.currentLocalBit;
-
-            if (1 > this.availableLocalBits - localBit)
+            if (1 > this.state.availableLocalBits)
             {
-                localBit = this.LoadBits();
+                this.LoadBits();
             }
-
-            this.currentBit++;
-            this.currentLocalBit = localBit + 1;
-
-            return localBit;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected abstract uint LoadBits();
-
-        Vector256<byte> ByteExpansionMask = Vector256.Create(
-            (byte)0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x01, 0x01, 0x01, 0x01,
-            0x01, 0x01, 0x01, 0x01,
-            0x02, 0x02, 0x02, 0x02,
-            0x02, 0x02, 0x02, 0x02,
-            0x03, 0x03, 0x03, 0x03,
-            0x03, 0x03, 0x03, 0x03
-        );
-
-        Vector256<byte> RelevantBitMask = Vector256.Create(
-            0x01, 0x02, 0x04, 0x08,
-            0x10, 0x20, 0x40, 0x80,
-            0x01, 0x02, 0x04, 0x08,
-            0x10, 0x20, 0x40, 0x80,
-            0x01, 0x02, 0x04, 0x08,
-            0x10, 0x20, 0x40, 0x80,
-            0x01, 0x02, 0x04, 0x08,
-            0x10, 0x20, 0x40, 0x80
-        );
-
-        Vector256<byte> Sixteens = Vector256.Create((byte)16);
-        Vector256<byte> Zero = Vector256.Create((byte)0);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected unsafe void BroadcastTo16s(ulong value)
+        private void Consume(int bits)
         {
-            if (Avx2.IsSupported)
-            {
-                var a = (uint)value;
-                var b = (uint)(value >> 32);
-
-                var y = Vector256.Create(a);
-                var y2 = Vector256.Create(b);
-
-                var z = Avx2.Shuffle(y.AsByte(), this.ByteExpansionMask);
-                var z2 = Avx2.Shuffle(y2.AsByte(), this.ByteExpansionMask);
-
-                z = Avx2.And(z, this.RelevantBitMask);
-                z2 = Avx2.And(z2, this.RelevantBitMask);
-
-                z = Avx2.CompareEqual(z, Zero);
-                z2 = Avx2.CompareEqual(z2, Zero);
-
-                z = Avx2.Shuffle(this.Sixteens, z);
-                z2 = Avx2.Shuffle(this.Sixteens, z2);
-
-                Avx2.Store(this.localBitsAsBytesPtr, z);
-                Avx2.Store(this.localBitsAsBytesPtr + 32, z2);
-            }
-            else
-            {
-                for (var i = 0; i < 64; i++)
-                {
-                    this.localBitsAsBytes[i] = (byte)(((value >> i) & 1) * 16);
-                }
-            }
+            this.state.localBits >>= bits;
+            this.state.currentBit += (uint)bits;
+            this.state.availableLocalBits -= (uint)bits;
         }
 
-        private bool disposedValue;
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!this.disposedValue)
-            {
-                if (disposing)
-                {
-                    if(this.localBitsAsBytes != null)
-                    {
-                        bufferPool.Return(this.localBitsAsBytes);
-                        this.localBitsAsBytes = null;
-                    }
-                }
-
-                this.disposedValue = true;
-            }
-        }
-
-        public void Dispose()
-        {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            this.Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
+        protected abstract void LoadBits();
+        public abstract void Dispose();
     }
 }

@@ -25,11 +25,12 @@ namespace OpenBlam.Core.Compression.Deflate
             this.Data.Position = (int)(this.CurrentBit << 3);
         }
 
-        protected override uint LoadBits()
+        protected override void LoadBits()
         {
             // read bits from currentBit
-            var startByte = (int)(this.currentBit >> 3);
-            var currentBit = (uint)(this.currentBit & 7);
+            var localCurrentBit = this.state.currentBit;
+            var startByte = (int)(localCurrentBit >> 3);
+            var currentBit = (int)(localCurrentBit & 7);
 
             if (this.Data.Position != startByte)
             {
@@ -40,28 +41,17 @@ namespace OpenBlam.Core.Compression.Deflate
 
             var accum = Unsafe.As<byte, ulong>(ref this.buffer[0]);
 
-            this.BroadcastTo16s(accum);
-
-            this.localBits = accum;
-            this.availableLocalBits = 64 - currentBit;
-
-            return currentBit;
+            this.state.localBits = accum >>= currentBit;
+            this.state.availableLocalBits = (uint)(64 - currentBit);
         }
 
-        protected override void Dispose(bool disposing)
+        public override void Dispose()
         {
-            
-            if (disposing)
+            if(this.buffer != null)
             {
-                if(this.buffer != null)
-                {
-                    bufferPool.Return(this.buffer);
-                    this.buffer = null;
-                }
+                bufferPool.Return(this.buffer);
+                this.buffer = null;
             }
-
-            base.Dispose(disposing);
-
         }
     }
 }
