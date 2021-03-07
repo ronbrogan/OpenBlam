@@ -28,7 +28,7 @@ namespace OpenBlam.Core.Compression.Deflate
         protected override void LoadBits()
         {
             // read bits from currentBit
-            var localCurrentBit = this.state.currentBit;
+            var localCurrentBit = this.currentBit;
             var startByte = (int)(localCurrentBit >> 3);
             var currentBit = (int)(localCurrentBit & 7);
 
@@ -41,8 +41,8 @@ namespace OpenBlam.Core.Compression.Deflate
 
             var accum = Unsafe.As<byte, ulong>(ref this.buffer[0]);
 
-            this.state.localBits = accum >>= currentBit;
-            this.state.availableLocalBits = (uint)(64 - currentBit);
+            this.localBits = accum >>= currentBit;
+            this.availableLocalBits = (uint)(64 - currentBit);
         }
 
         public override void Dispose()

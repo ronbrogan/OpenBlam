@@ -29,7 +29,8 @@ namespace OpenBlam.Core.Benchmarks
                 var benchmarkType = args[0] switch
                 {
                     "deflate-synthetic" => typeof(DeflateSynthetic),
-                    "deflate-corpus" => typeof(DeflateCorpus)
+                    "deflate-corpus" => typeof(DeflateCorpus),
+                    "allocation" => typeof(AllocationBenchmarks)
                 };
 
                 BenchmarkSwitcher.FromTypes(new[] { benchmarkType }).Run(((Span<string>)args).Slice(1).ToArray());

@@ -52,10 +52,7 @@ namespace OpenBlam.Core.Compression.Deflate
 
         public void Dispose()
         {
-            if (this.Type == BlockType.DynamicHuffmanCodes)
-            {
-                this.HuffmanTree?.Dispose();
-            }
+            this.HuffmanTree?.Dispose();
         }
     }
 }

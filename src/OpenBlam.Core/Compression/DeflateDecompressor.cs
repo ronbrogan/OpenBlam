@@ -8,6 +8,8 @@ namespace OpenBlam.Core.Compression
     {
         public const int EndOfBlock = 256;
         public const int MaximumLookback = 1 << 15;
+        public const int MaxBitLength = 15;
+        public const int TopBit = 1 << 15;
 
         public static ushort[] LengthBase = new ushort[]
         {

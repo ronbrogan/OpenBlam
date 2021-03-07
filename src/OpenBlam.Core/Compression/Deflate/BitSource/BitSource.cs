@@ -12,18 +12,13 @@ namespace OpenBlam.Core.Compression.Deflate
 
     public unsafe abstract class BitSource : IDisposable
     {
-        [StructLayout(LayoutKind.Explicit)]
-        protected unsafe struct BitSourceState
-        {
-            [FieldOffset(0)] public uint availableLocalBits;
-            [FieldOffset(4)] public ulong currentBit;
-            [FieldOffset(12)] public ulong localBits;
-        }
+        public ulong availableLocalBits;
+        public ulong currentBit;
+        public ulong localBits;
 
         protected readonly static PinnedArrayPool<byte> bufferPool = PinnedArrayPool<byte>.Shared;
 
-        protected BitSourceState state = new BitSourceState();
-        public ulong CurrentBit => this.state.currentBit;
+        public ulong CurrentBit => this.currentBit;
 
         public BitSource()
         {
@@ -32,18 +27,18 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSet()
         {
-            this.PrepBit();
-            var v = (this.state.localBits & 1) == 1;
-            this.Consume(1);
+            this.PrepBits(1);
+            var v = (this.localBits & 1) == 1;
+            Consume(1, this);
             return v;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe ulong CurrentBitValue()
         {
-            this.PrepBit();
-            var v = this.state.localBits & 1;
-            this.Consume(1);
+            this.PrepBits(1);
+            var v = this.localBits & 1;
+            Consume(1, this);
             return v;
         }
 
@@ -57,9 +52,9 @@ namespace OpenBlam.Core.Compression.Deflate
             this.PrepBits(bits);
 
             var mask = (1u << bits) - 1;
-            var value2 = this.state.localBits & mask;
+            var value2 = this.localBits & mask;
 
-            this.Consume(bits);
+            Consume(bits, this);
 
             return (ushort)value2;
         }
@@ -67,9 +62,21 @@ namespace OpenBlam.Core.Compression.Deflate
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public virtual void SkipToNextByte()
         {
-            this.state.currentBit >>= 3;
-            this.state.currentBit++;
-            this.state.currentBit <<= 3;
+            this.currentBit >>= 3;
+            this.currentBit++;
+            this.currentBit <<= 3;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ulong AvailableBits()
+        {
+            return this.availableLocalBits;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ulong PeekBits()
+        {
+            return this.localBits;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -77,33 +84,30 @@ namespace OpenBlam.Core.Compression.Deflate
         {
             var bits = (byteCount << 3);
 
-            this.state.currentBit += (uint)bits;
+            this.currentBit += (uint)bits;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void PrepBits(int need)
+        public void PrepBits(uint need)
         {
-            if (need > this.state.availableLocalBits)
+            if (need > this.availableLocalBits)
             {
                 this.LoadBits();
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void PrepBit()
+        public void Consume(ulong bits)
         {
-            if (1 > this.state.availableLocalBits)
-            {
-                this.LoadBits();
-            }
+            Consume(bits, this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Consume(int bits)
+        private static void Consume(ulong bits, BitSource b)
         {
-            this.state.localBits >>= bits;
-            this.state.currentBit += (uint)bits;
-            this.state.availableLocalBits -= (uint)bits;
+            b.availableLocalBits -= bits;
+            b.currentBit += bits;
+            b.localBits >>= (int)bits;
         }
 
         protected abstract void LoadBits();
