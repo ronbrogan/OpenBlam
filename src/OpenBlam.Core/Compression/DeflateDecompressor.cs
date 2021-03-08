@@ -1,5 +1,4 @@
 ﻿using OpenBlam.Core.Compression.Deflate;
-using System;
 using System.IO;
 
 namespace OpenBlam.Core.Compression
@@ -49,7 +48,7 @@ namespace OpenBlam.Core.Compression
             }
         }
 
-        public unsafe static void Decompress(Stream compressed, Stream decompressed)
+        public static void Decompress(Stream compressed, Stream decompressed)
         {
             using var output = new DeflateStreamOutput(decompressed);
             using var bits = new StreamBitSource(compressed);

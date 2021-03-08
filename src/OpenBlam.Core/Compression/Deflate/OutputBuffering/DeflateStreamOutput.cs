@@ -1,10 +1,8 @@
 ﻿using OpenBlam.Core.Collections;
 using System;
-using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 
 namespace OpenBlam.Core.Compression.Deflate

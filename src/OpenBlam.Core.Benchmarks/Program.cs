@@ -12,7 +12,7 @@ namespace OpenBlam.Core.Benchmarks
             if(args.Length  == 0)
             { 
                 var b = new DeflateCorpus();
-                var info = b.GetData().First(d => d.ToString() == "fields.c");
+                var info = b.GetData().First(d => d.ToString() == "alice29.txt");
 
                 Thread.Sleep(2000);
 
